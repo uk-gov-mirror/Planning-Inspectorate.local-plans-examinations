@@ -16,14 +16,7 @@ import {
 	StageLabel
 } from '../../types.ts';
 
-function initialiseTest(
-	params: { refNum: string },
-	plan?: unknown,
-	options: {
-		gateway2ReportDocuments?: unknown[];
-		reportIssuedDate?: Date | null;
-	} = {}
-) {
+function initialiseTest(params: { refNum: string }, plan?: unknown) {
 	const nunjucks = configureNunjucks();
 	const mockRes = {
 		render: mock.fn((view, data) => nunjucks.render(view, data)),
@@ -36,38 +29,14 @@ function initialiseTest(
 	const logger = mockLogger();
 	const mockService = {
 		logger,
-		getPlans: mock.fn(async () => (plan ? [buildPlan(plan)] : buildTestPlans())),
-		db: {
-			case: {
-				findUnique: mock.fn(async () =>
-					options.gateway2ReportDocuments
-						? {
-								id: 'case-1',
-								gateway2Info: {
-									reportIssuedDate: options.reportIssuedDate ?? new Date('2026-05-08T12:00:00.000Z')
-								}
-							}
-						: null
-				)
-			},
-			document: {
-				findMany: mock.fn(async () => options.gateway2ReportDocuments ?? [])
-			}
-		}
+		getPlans: mock.fn(async () => (plan ? [buildPlan(plan)] : buildTestPlans()))
 	};
 	const planPage = buildPlanPage(mockService);
-	return { planPage, mockRes, mockReq, nunjucks, logger };
+	return { planPage, mockRes, mockReq, nunjucks, logger, mockService };
 }
 
-async function renderPlan(
-	params: { refNum: string },
-	plan?: unknown,
-	options?: {
-		gateway2ReportDocuments?: unknown[];
-		reportIssuedDate?: Date | null;
-	}
-) {
-	const ctx = initialiseTest(params, plan, options);
+async function renderPlan(params: { refNum: string }, plan?: unknown) {
+	const ctx = initialiseTest(params, plan);
 	await ctx.planPage(ctx.mockReq, ctx.mockRes);
 	const [view, data] = ctx.mockRes.render.mock.calls[0].arguments;
 	return {
@@ -445,30 +414,16 @@ describe('plan page', () => {
 			refNum: 'PLAN/123456',
 			stage: STAGE.Gateway3,
 			status: STATUS.ReadyToStart,
-			dates: { G1: '7 May 2026', G2: '2 September 2026', G3: '1 August 2026', E: '1 September 2026' }
-		};
-		const { data, html } = await renderPlan({ refNum: 'PLAN/123456' }, plan, {
-			gateway2ReportDocuments: [
+			dates: { G1: '7 May 2026', G2: '2 September 2026', G3: '1 August 2026', E: '1 September 2026' },
+			gateway2ReportFiles: [
 				{
-					guid: 'document-guid-1',
-					name: 'Gateway 2 report PLAN/123456',
-					documentSetId: 'g2-report',
-					isDeleted: false,
-					latestDocumentVersion: {
-						version: 1,
-						originalFilename: 'gateway-2-report.txt',
-						fileName: 'gateway-2-report.txt',
-						mime: 'text/plain',
-						size: 17,
-						blobStorageContainer: 'local-planning-documents-test',
-						blobStoragePath: 'gateway-2-report/PLAN%2F123456/gateway-2-report.txt',
-						documentURI: 'http://127.0.0.1:10000/devstoreaccount1/local-planning-documents-test/report.txt',
-						dateCreated: new Date('2026-09-16T12:39:02.272Z'),
-						isDeleted: false
-					}
+					fileName: 'gateway-2-report.txt',
+					documentGuid: 'document-guid-1',
+					dateCreated: new Date('2026-09-16T12:39:02.272Z')
 				}
 			]
-		});
+		};
+		const { data, html, mockService } = await renderPlan({ refNum: 'PLAN/123456' }, plan);
 
 		assert.strictEqual(data.showGateway2Report, true);
 		assert.ok(html.includes('data-cy="gateway-2-report-section"'));
@@ -483,6 +438,7 @@ describe('plan page', () => {
 			html.indexOf('data-cy="gateway-2-report-section"') < html.indexOf('Current stage'),
 			'expected the Gateway 2 report row to render above the plan metadata'
 		);
+		assert.strictEqual(mockService.getPlans.mock.callCount(), 1);
 	});
 
 	it('should render Gateway 3 as ready to start with a link when the Gateway 2 report has been uploaded', async () => {

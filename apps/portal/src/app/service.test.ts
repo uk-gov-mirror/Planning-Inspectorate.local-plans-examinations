@@ -2,6 +2,7 @@
 
 import assert from 'node:assert';
 import { describe, it, mock } from 'node:test';
+import { DOCUMENT_SET_ID } from '@pins/local-plans-database/src/seed/static-data/ids/document-set.ts';
 import { PortalService, derivePlanProgress } from './service.ts';
 import { STAGE, STATUS } from './types.ts';
 
@@ -38,8 +39,12 @@ function buildCase(overrides = {}) {
 
 function buildGateway2ReportDocument(dateCreated = new Date('2026-09-02T12:00:00.000Z')) {
 	return {
+		guid: 'document-guid-1',
+		name: 'Gateway 2 report',
 		createdAt: new Date('2026-09-01T12:00:00.000Z'),
 		latestDocumentVersion: {
+			originalFilename: 'gateway-2-report.pdf',
+			fileName: 'stored-gateway-2-report.pdf',
 			dateCreated,
 			isDeleted: false
 		}
@@ -197,13 +202,20 @@ describe('PortalService', () => {
 					},
 					documents: {
 						where: {
-							documentSetId: 'g2-report',
+							documentSetId: DOCUMENT_SET_ID.G2_REPORT,
 							isDeleted: false
 						},
+						orderBy: {
+							createdAt: 'asc'
+						},
 						select: {
+							guid: true,
+							name: true,
 							createdAt: true,
 							latestDocumentVersion: {
 								select: {
+									originalFilename: true,
+									fileName: true,
 									dateCreated: true,
 									isDeleted: true
 								}
@@ -277,6 +289,13 @@ describe('PortalService', () => {
 			assert.strictEqual(plans[0].stage, STAGE.Gateway3);
 			assert.strictEqual(plans[0].status, STATUS.ReadyToStart);
 			assert.strictEqual(plans[0].dates.G2, '1 September 2026');
+			assert.deepStrictEqual(plans[0].gateway2ReportFiles, [
+				{
+					fileName: 'gateway-2-report.pdf',
+					documentGuid: 'document-guid-1',
+					dateCreated: new Date('2026-09-02T12:00:00.000Z')
+				}
+			]);
 		});
 
 		it('maps missing info table dates to Not set', async () => {

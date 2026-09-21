@@ -1,6 +1,5 @@
-import type { UploadedFile } from '@pins/local-plans-lib/forms/custom-components/file-uploader/index.ts';
-
-export const GATEWAY_2_REPORT_DOCUMENT_SET_ID = 'g2-report';
+import { formatDisplayDate } from '#util/date.ts';
+import type { Gateway2ReportFile } from '../../types.ts';
 
 export type Gateway2ReportFileViewModel = {
 	fileName: string;
@@ -10,36 +9,23 @@ export type Gateway2ReportFileViewModel = {
 
 export function buildGateway2ReportFilesViewModel(
 	planReference: string | undefined,
-	files: UploadedFile[]
+	files: Gateway2ReportFile[]
 ): Gateway2ReportFileViewModel[] {
 	const encodedPlanReference = planReference ? encodeURIComponent(planReference) : undefined;
 
 	return files.map((file) => {
-		const documentGuid = file.metadata?.documentGuid;
 		const fileName = decodeFileName(file.fileName);
 
 		return {
 			fileName,
 			href:
-				encodedPlanReference && typeof documentGuid === 'string' && documentGuid
+				encodedPlanReference && file.documentGuid
 					? `/manage-local-plans/${encodedPlanReference}/gateway-2-submission/download-document/${encodeURIComponent(
-							documentGuid
+							file.documentGuid
 						)}`
 					: undefined,
-			sharedDate: file.dateCreated ? formatDisplayDate(file.dateCreated) : undefined
+			sharedDate: formatDisplayDate(file.dateCreated)
 		};
-	});
-}
-
-function formatDisplayDate(date: Date | null | undefined): string | undefined {
-	if (!date) {
-		return undefined;
-	}
-
-	return date.toLocaleDateString('en-GB', {
-		day: 'numeric',
-		month: 'long',
-		year: 'numeric'
 	});
 }
 

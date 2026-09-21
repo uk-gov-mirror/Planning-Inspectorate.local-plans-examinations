@@ -158,13 +158,11 @@ describe('syncGateway2UploadAnswer', () => {
 describe('buildGateway2ReportFilesViewModel', () => {
 	it('builds read-only Gateway 2 report download links', () => {
 		const files = [
-			buildUploadedFile({
+			{
 				fileName: 'gateway-2%20report.pdf',
 				dateCreated: new Date('2026-05-08T12:00:00.000Z'),
-				metadata: {
-					documentGuid: 'document-guid-1'
-				}
-			})
+				documentGuid: 'document-guid-1'
+			}
 		];
 
 		assert.deepEqual(buildGateway2ReportFilesViewModel('PLAN/123456', files), [
@@ -178,9 +176,10 @@ describe('buildGateway2ReportFilesViewModel', () => {
 
 	it('omits the download link when the document guid is missing', () => {
 		const files = [
-			buildUploadedFile({
-				fileName: 'gateway-2-report.pdf'
-			})
+			{
+				fileName: 'gateway-2-report.pdf',
+				documentGuid: ''
+			}
 		];
 
 		assert.deepEqual(buildGateway2ReportFilesViewModel('PLAN/123456', files), [

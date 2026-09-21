@@ -4,20 +4,8 @@ import type { Config } from './config.ts';
 import { STATUS, STAGE, buildPlan, validPlan } from './types.ts';
 import type { Plan } from './types.ts';
 import { Service } from '@pins/local-plans-lib/app/service.ts';
-
-const GATEWAY_2_REPORT_DOCUMENT_SET_ID = 'g2-report';
-
-function formatDisplayDate(date: Date | null | undefined): string {
-	if (!date) {
-		return 'Not set';
-	}
-
-	return date.toLocaleDateString('en-GB', {
-		day: 'numeric',
-		month: 'long',
-		year: 'numeric'
-	});
-}
+import { formatDisplayDate } from '#util/date.ts';
+import { DOCUMENT_SET_ID } from '@pins/local-plans-database/src/seed/static-data/ids/document-set.ts';
 
 type PortalCase = {
 	reference: string;
@@ -42,8 +30,12 @@ type PortalCase = {
 		submissionForExaminationDate: Date | null;
 	} | null;
 	documents: {
+		guid: string;
+		name: string;
 		createdAt: Date;
 		latestDocumentVersion: {
+			originalFilename: string | null;
+			fileName: string | null;
 			dateCreated: Date | null;
 			isDeleted: boolean;
 		} | null;
@@ -59,6 +51,27 @@ function getGateway2ReportUploadedDate(caseRecord: PortalCase): Date | null {
 
 function hasIssuedGateway2Report(caseRecord: PortalCase): boolean {
 	return Boolean(caseRecord.gateway2Info?.reportIssuedDate && getGateway2ReportUploadedDate(caseRecord));
+}
+
+function getGateway2ReportFiles(caseRecord: PortalCase): Plan['gateway2ReportFiles'] {
+	if (!caseRecord.gateway2Info?.reportIssuedDate) {
+		return [];
+	}
+
+	return caseRecord.documents.flatMap((document) => {
+		const version = document.latestDocumentVersion;
+		if (!version || version.isDeleted) {
+			return [];
+		}
+
+		return [
+			{
+				fileName: version.originalFilename ?? version.fileName ?? document.name,
+				documentGuid: document.guid,
+				...(version.dateCreated ? { dateCreated: version.dateCreated } : {})
+			}
+		];
+	});
 }
 
 export function derivePlanProgress(caseRecord: PortalCase): Pick<Plan, 'stage' | 'status'> {
@@ -112,11 +125,12 @@ function mapCaseToPlan(caseRecord: PortalCase): Plan | null {
 		title: caseRecord.planTitle,
 		stage: progress.stage,
 		status: progress.status,
+		gateway2ReportFiles: getGateway2ReportFiles(caseRecord),
 		dates: {
-			G1: formatDisplayDate(gateway1Date),
-			G2: formatDisplayDate(gateway2Date),
-			G3: formatDisplayDate(gateway3Date),
-			E: formatDisplayDate(examinationDate)
+			G1: formatDisplayDate(gateway1Date) ?? 'Not set',
+			G2: formatDisplayDate(gateway2Date) ?? 'Not set',
+			G3: formatDisplayDate(gateway3Date) ?? 'Not set',
+			E: formatDisplayDate(examinationDate) ?? 'Not set'
 		}
 	});
 
@@ -157,13 +171,20 @@ const planCaseInclude = {
 	},
 	documents: {
 		where: {
-			documentSetId: GATEWAY_2_REPORT_DOCUMENT_SET_ID,
+			documentSetId: DOCUMENT_SET_ID.G2_REPORT,
 			isDeleted: false
 		},
+		orderBy: {
+			createdAt: 'asc' as const
+		},
 		select: {
+			guid: true,
+			name: true,
 			createdAt: true,
 			latestDocumentVersion: {
 				select: {
+					originalFilename: true,
+					fileName: true,
 					dateCreated: true,
 					isDeleted: true
 				}
