@@ -17,8 +17,16 @@ export class ManageHomePage extends BasePage {
 		return cy.getByData('casesTable');
 	}
 
+	get assignedToMeLink() {
+		return this.serviceNavigation.contains('a', 'Assigned to me');
+	}
+
 	startCreateCase() {
 		this.createCaseLink.should('be.visible').click();
+	}
+
+	openAssignedToMe() {
+		this.assignedToMeLink.should('be.visible').and('have.attr', 'href', '/assigned-to-me').click();
 	}
 
 	openCaseByPlanTitle(planTitle: string) {
@@ -35,6 +43,20 @@ export class ManageHomePage extends BasePage {
 
 	verifyNoCasesMessage(text: string) {
 		this.noCasesMessage.should('be.visible').and('contain.text', text);
+	}
+
+	get caseReference() {
+		return cy.getByData('case-reference-link');
+	}
+	getReference() {
+		return this.caseReference
+			.should('be.visible')
+			.invoke('text')
+			.then((reference) => reference.trim());
+	}
+
+	verifyReferenceFormat() {
+		this.getReference().should('match', /^PLAN-\d+$/);
 	}
 }
 

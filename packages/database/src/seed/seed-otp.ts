@@ -106,6 +106,7 @@ async function run() {
 				planTitle,
 				planType: 'Local Plan',
 				...planDates,
+				submissionDate: null,
 				...(createdAt ? { createdAt } : {}),
 				lpas: lpaRelations,
 				gateway1Info,
@@ -120,6 +121,7 @@ async function run() {
 				planTitle,
 				planType: 'Local Plan',
 				...planDates,
+				submissionDate: null,
 				...(createdAt ? { createdAt } : {}),
 				gateway1Info: {
 					create: gateway1Info.upsert.create
