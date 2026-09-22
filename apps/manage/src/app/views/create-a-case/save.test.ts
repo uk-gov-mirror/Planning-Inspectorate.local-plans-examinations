@@ -38,7 +38,8 @@ describe('buildSaveController', () => {
 				info: mock.fn(),
 				warn: mock.fn(),
 				error: mock.fn()
-			}
+			},
+			getEntraClient: mock.fn()
 		};
 
 		mockRequest = {

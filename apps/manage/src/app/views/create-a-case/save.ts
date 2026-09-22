@@ -5,6 +5,7 @@ import { clearDataFromSession, type JourneyResponse } from '@planning-inspectora
 import * as authSession from '@planning-inspectorate/core/auth';
 import { parseDate } from '../../util/date.ts';
 import { questions } from './questions.ts';
+import { retrieveCaseOfficers } from '../../util/options-helper.ts';
 
 /**
  * The structure of data for the journey answers
@@ -56,7 +57,9 @@ export function buildSaveController(service: ManageService): RequestHandler {
 		const allEmails = answers.contactDetails.map((contact) => contact.email);
 
 		const uniqueLpaCodes = [...new Set(answers.checkLpas.map((lpa) => lpa.lpa))];
-		await saveDataToDatabase(service, answers, uniqueLpaCodes, currentUser);
+		const caseOfficerNames = await retrieveCaseOfficers(service, req.session as authSession.SessionWithAuth);
+
+		await saveDataToDatabase(service, answers, uniqueLpaCodes, currentUser, caseOfficerNames);
 
 		service.logger.info(answers, 'case created');
 
@@ -100,7 +103,8 @@ async function saveDataToDatabase(
 	service: ManageService,
 	answers: CreateCaseAnswers,
 	uniqueLpaCodes: string[],
-	currentUser: string
+	currentUser: string,
+	caseOfficerNames: { value: string; text: string }[]
 ): Promise<void> {
 	await service.db.$transaction(async (tx) => {
 		const createdCase = await tx.case.create({
@@ -108,6 +112,7 @@ async function saveDataToDatabase(
 				reference: answers.reference,
 				email: answers.email,
 				caseOfficer: answers.caseOfficer,
+				caseOfficerName: caseOfficerNames.find((officer) => officer.value === answers.caseOfficer)?.text || '',
 				planTitle: answers.planTitle,
 				planType: answers.planType,
 				lpas: {
