@@ -16,7 +16,7 @@ export class Gateway2SaveController extends SaveController {
 		return !!matchedQuestion;
 	}
 	protected async shouldSaveToSession() {
-		return this.isGateway2WorkshopQuestion() && !this.req.originalUrl.includes('/timetable/');
+		return this.isGateway2WorkshopQuestion();
 	}
 	/**
 	 * Delete the workshop at the given index
