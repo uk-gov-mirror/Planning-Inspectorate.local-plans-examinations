@@ -1542,6 +1542,13 @@ const caseQuestions: Record<string, ManageQuestionConfig> = {
 		url: 'examination-report-manage',
 		viewData: { uploadQuestionUrl: 'examination-report' }
 	},
+	hearingDates: {
+		type: CUSTOM_COMPONENTS.CUSTOM_HEARING_DATES,
+		title: 'Hearing dates',
+		question: 'Hearing dates',
+		fieldName: 'hearings',
+		url: 'examination-hearing-dates'
+	},
 	...examinationPauseQuestions,
 	...gateway3Questions
 };
