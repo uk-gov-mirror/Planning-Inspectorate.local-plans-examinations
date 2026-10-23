@@ -68,9 +68,6 @@ export class ExaminationTabHandler extends OverviewPageLoadHandler {
 			}
 		}
 
-		journeyResponse.answers.isSound = isSound;
-		res.locals.journeyResponse = journeyResponse;
-
 		if (
 			req.method === 'POST' &&
 			req.params.question === COMMON_CONSTS.MIQS_QUESTION &&
