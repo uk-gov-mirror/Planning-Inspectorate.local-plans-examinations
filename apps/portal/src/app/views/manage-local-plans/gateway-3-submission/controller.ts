@@ -43,6 +43,7 @@ import type { Gateway3InfoModel } from '@pins/local-plans-database/src/client/mo
 import { GATEWAY_3_STATUS } from '@pins/local-plans-database/src/seed/static-data/ids/index.ts';
 import lusca from 'lusca';
 import { STATUS, StatusTag } from '../../../types.ts';
+import { setVirusScanViewLocals } from '../utils.ts';
 import {
 	isGateway3ResubmissionAwaitingSubmission,
 	type Gateway3SubmissionSummary
@@ -192,12 +193,12 @@ function getCaseScopedSessionAnswers(req: Request, planReference: string): Recor
 	);
 }
 
-function fileUploaderCaseSessionKey(req: Request) {
+export function fileUploaderCaseSessionKey(req: Request) {
 	const questionConfig = getRouteFileUploadQuestion(req);
 	return fileUploaderCaseSessionKeyForField(req, questionConfig.fieldName);
 }
 
-function fileUploaderCaseSessionKeyForField(req: Request, fieldName: string) {
+export function fileUploaderCaseSessionKeyForField(req: Request, fieldName: string) {
 	return `${req.params.planReference}:${fieldName}`;
 }
 
@@ -348,6 +349,11 @@ export function setGateway3ViewLocals(req: Request, res: Response) {
 	if (currentCase?.gateway3Info?.expectedDate) {
 		res.locals.targetDate = formatDisplayDate(currentCase.gateway3Info.expectedDate);
 	}
+
+	setVirusScanViewLocals(
+		res,
+		gateway3FileUploadQuestionConfigs.map((questionConfig) => questionConfig.fieldName)
+	);
 }
 
 export function setGateway3ViewData(req: Request, res: Response, next: NextFunction) {
@@ -680,15 +686,16 @@ export function buildGetDeclarationPage(): RequestHandler {
 	return (req, res) => {
 		const planReference = getRoutePlanReference(req);
 		const encodedPlanReference = planReference ? encodeURIComponent(planReference) : undefined;
-		const gateway3SubmissionUrl = encodedPlanReference
-			? `/manage-local-plans/${encodedPlanReference}/gateway-3-submission`
+		const isResubmission = req.query.from === 'resubmission';
+		const gateway3Url = encodedPlanReference
+			? `/manage-local-plans/${encodedPlanReference}/${isResubmission ? 'gateway-3-resubmission' : 'gateway-3-submission'}`
 			: undefined;
 
 		return res.render(DECLARATION_VIEW_PATH, {
 			pageTitle: "Are you sure you're ready to submit?",
 			pageHeading: "Are you sure you're ready to submit?",
-			backLinkUrl: gateway3SubmissionUrl,
-			goBackUrl: gateway3SubmissionUrl
+			backLinkUrl: gateway3Url,
+			goBackUrl: gateway3Url
 		});
 	};
 }

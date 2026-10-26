@@ -1,24 +1,36 @@
 import { caseHistoryPage } from '../../../../page-objects/manage/case-history/index.ts';
-import { openSeededExaminationPage } from '../../../../flows/manage/examination-flow.ts';
+import {
+	openSeededExaminationPage,
+	pauseExamination,
+	restartExamination
+} from '../../../../flows/manage/examination-flow.ts';
+import { caseOverviewPage } from '../../../../page-objects/manage/case-overview/index.ts';
+import type { SeededManageCase } from '../../../../flows/manage/seeded-case-flow.ts';
 import { seededCase } from '../../../../fixtures/manage/case.ts';
 import {
 	actualSubmissionDate,
 	examiningInspector1,
 	examinationWebsite,
+	examinationPause,
 	factCheckActualDate,
 	factCheckDateReceivedFromInspector,
 	factCheckDueDate,
 	factCheckReceivedBackFromLpaDate,
 	finalReportIssueDate,
+	hearingDateAndTime,
 	letterSentToMHCLGDate,
 	QADateAnswers,
 	QAInspectorsAnswers,
-	planPauseStartDate,
+	soundUnsoundDate,
+	seededExaminationInProgress,
+	seededPausedExamination,
+	seededExaminationHearing,
 	soundUnsound
 } from '../../../../fixtures/manage/examination.ts';
 import {
 	actualSubmissionDatePage,
 	examinationPage,
+	examinationPausePages,
 	examiningInspector1Page,
 	examinationWebsitePage,
 	factCheckActualDatePage,
@@ -28,10 +40,12 @@ import {
 	finalReportIssueDatePage,
 	letterSentToMHCLGDatePage,
 	examinationQAInspector1Page,
+	QADatePage,
 	QAPanelResponseDatePage,
-	planPauseStartDatePage,
+	soundUnsoundDatePage,
 	soundUnsoundPage
 } from '../../../../page-objects/manage/examination/index.ts';
+import { hearingDateAndTimePage, hearingCheckPage } from '../../../../page-objects/manage/examination/hearing-page.ts';
 
 const factCheckUpdates = [
 	{ answer: factCheckDateReceivedFromInspector, page: factCheckDateReceivedFromInspectorPage },
@@ -188,7 +202,7 @@ describe('Examination updates', () => {
 	);
 
 	it('updates Important Dates and records case history', { tags: ['regression'] }, () => {
-		updateDateAnswer(planPauseStartDate, planPauseStartDatePage);
+		updateDateAnswer(soundUnsoundDate, soundUnsoundDatePage);
 
 		examinationPage.openActionLinkFor(soundUnsound.row);
 		soundUnsoundPage.verifyLoaded(soundUnsound.value);
@@ -199,13 +213,144 @@ describe('Examination updates', () => {
 
 		openCaseHistory();
 
-		caseHistoryPage.verifyHistoryEvent(historyEventFor(planPauseStartDate));
+		caseHistoryPage.verifyHistoryEvent(historyEventFor(soundUnsoundDate));
 		caseHistoryPage.verifyHistoryEvent(
 			`${soundUnsound.row} updated from ${soundUnsound.display} to ${soundUnsound.updatedDisplay}`
 		);
 	});
 
 	it('returns to Examination from an Important Dates page back link', { tags: ['regression'] }, () => {
-		returnFromDatePage(planPauseStartDate, planPauseStartDatePage);
+		returnFromDatePage(soundUnsoundDate, soundUnsoundDatePage);
+	});
+});
+
+describe('Examination statuses', () => {
+	beforeEach(() => cy.task('clearDb'));
+	after(() => cy.task('clearDb'));
+
+	it('changes to QA only after the report-sent date is saved', { tags: ['regression'] }, () => {
+		openSeededExaminationPage(seededExaminationInProgress);
+		examinationPage.verifyHeaderStatus('Exam in progress');
+		examinationPage.openActionLinkFor(QAInspectorsAnswers.QAInspector1.row);
+		examinationQAInspector1Page.verifyLoaded();
+		examinationQAInspector1Page.enterLookupAnswer(QAInspectorsAnswers.QAInspector1.input);
+
+		examinationPage.verifyLoaded(seededCase.planTitle);
+		examinationPage.verifySummaryRowContains(
+			QAInspectorsAnswers.QAInspector1.row,
+			QAInspectorsAnswers.QAInspector1.display
+		);
+		examinationPage.verifyHeaderStatus('Exam in progress');
+		examinationPage.openActionLinkFor(QADateAnswers.QADate.row);
+		QADatePage.verifyLoaded();
+		QADatePage.enterDate(QADateAnswers.QADate.input);
+
+		examinationPage.verifyLoaded(seededCase.planTitle);
+		examinationPage.verifyHeaderStatus('QA');
+		cy.reload();
+		examinationPage.verifySummaryRowContains(QADateAnswers.QADate.row, QADateAnswers.QADate.display);
+		examinationPage.verifyHeaderStatus('QA');
+	});
+
+	it(
+		'preserves a pause after an unrelated edit and keeps its banner scoped to the case',
+		{ tags: ['regression'] },
+		() => {
+			openSeededExaminationPage(seededPausedExamination).then(({ reference }) => {
+				examinationPage.verifyPaused();
+				examinationPage.openActionLinkFor(actualSubmissionDate.row);
+				actualSubmissionDatePage.enterDate(actualSubmissionDate.input);
+				cy.reload();
+				examinationPage.verifyPaused();
+
+				examinationPage.openServiceNavigationItem('Overview');
+				caseOverviewPage.verifyLoaded(seededCase.planTitle);
+				caseOverviewPage.verifyNotificationBanner(examinationPause.banner);
+				caseOverviewPage.verifyNotificationBannerLink('View details', `/case/${reference}/examination`);
+			});
+			cy.task<SeededManageCase>('seedDb', seededExaminationInProgress).then(({ reference }) => {
+				caseOverviewPage.visit(`/case/${reference}/overview`);
+				caseOverviewPage.verifyLoaded(seededCase.planTitle);
+				caseOverviewPage.verifyHeaderStatus('Exam in progress');
+				caseOverviewPage.verifyNotificationBannerAbsent(examinationPause.banner);
+			});
+		}
+	);
+});
+
+describe('Examination pauses', () => {
+	const pages = examinationPausePages();
+	beforeEach(() => cy.task('clearDb'));
+	after(() => cy.task('clearDb'));
+
+	it('discards an abandoned pause, then saves it and records case history', { tags: ['regression'] }, () => {
+		openSeededExaminationPage(seededExaminationInProgress);
+		examinationPage.startPause();
+		pages.startDate.enterDate(examinationPause.input);
+		pages.details.verifyLoaded();
+		pages.details.goBack();
+		pages.startDate.verifyLoaded(examinationPause.input);
+		pages.startDate.saveAndContinue();
+		pages.details.cancelChanges();
+		cy.reload();
+		examinationPage.verifyNoPause();
+
+		pauseExamination();
+		examinationPage.verifyNotificationBanner('Changes saved');
+		examinationPage.verifyPaused();
+		cy.reload();
+		examinationPage.verifyPaused();
+		openCaseHistory();
+		caseHistoryPage.verifyHistoryEvent('Plan paused');
+	});
+
+	it('restarts a pause and adds a second one without changing the first', { tags: ['regression'] }, () => {
+		openSeededExaminationPage(seededPausedExamination);
+		examinationPage.openActionLinkFor('Examination restart date');
+		pages.restartDate.enterDate(examinationPause.restartInput);
+		pages.restartDetails.verifyLoaded();
+		pages.restartDetails.goBack();
+		pages.restartDate.verifyLoaded(examinationPause.restartInput);
+		pages.restartDate.saveAndContinue();
+		pages.restartDetails.cancelChanges();
+		examinationPage.verifyPaused();
+
+		restartExamination();
+		examinationPage.verifyNotificationBanner('Changes saved');
+		examinationPage.verifyRestarted();
+		cy.reload();
+		examinationPage.verifyRestarted();
+		openCaseHistory();
+		caseHistoryPage.verifyHistoryEvent('Plan restarted');
+
+		examinationPage.openServiceNavigationItem('Examination');
+		pauseExamination(examinationPause.second, 2);
+		cy.reload();
+		examinationPage.verifyRestartDetails();
+		examinationPage.verifyPaused(2, examinationPause.second.display, examinationPause.second.details);
+	});
+});
+
+describe('Hearing updates', () => {
+	beforeEach(() => {
+		cy.task('clearDb');
+		openSeededExaminationPage({ examination: { hearings: { create: [seededExaminationHearing] } } });
+	});
+	after(() => cy.task('clearDb'));
+
+	it('changes a saved hearing directly and records the hearing type in history', { tags: ['regression'] }, () => {
+		examinationPage.openActionLinkFor('Start date');
+		hearingDateAndTimePage.verifyAnswers(hearingDateAndTime.date, hearingDateAndTime.time);
+		hearingDateAndTimePage.enterDateAndTime(hearingDateAndTime.updatedDate, hearingDateAndTime.updatedTime);
+		hearingCheckPage.verifySummaryRowContains('Hearing date', hearingDateAndTime.updatedDisplay);
+		hearingCheckPage.confirmHearing();
+
+		examinationPage.verifyLoaded(seededCase.planTitle);
+		examinationPage.verifyNotificationBanner('Hearing created');
+		cy.reload();
+		examinationPage.verifySummaryRowContains('Start date', hearingDateAndTime.updatedDisplay);
+		examinationPage.verifySummaryRowContains('Time', '11:45');
+		openCaseHistory();
+		caseHistoryPage.verifyHistoryEvent('remote hearing set up');
 	});
 });

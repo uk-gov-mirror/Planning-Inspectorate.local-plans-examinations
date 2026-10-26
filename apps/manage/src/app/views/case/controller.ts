@@ -4,7 +4,7 @@ import { type SaveDataFn, type Question } from '@planning-inspectorate/dynamic-f
 import type { Request, Response, NextFunction } from 'express';
 import type { PrismaClient } from '@pins/local-plans-database/src/client/client.ts';
 import * as authSession from '@planning-inspectorate/core/auth';
-import { questions } from './questions.ts';
+import { examinationPauseBaseUrls, questions } from './questions.ts';
 import type { CaseModel } from '@pins/local-plans-database/src/client/models/Case.ts';
 import { type FileUploaderSession } from '@pins/local-plans-lib/forms/custom-components/file-uploader/index.ts';
 import { DocumentUtil } from '@pins/local-plans-lib/util/documents.ts';
@@ -17,7 +17,7 @@ import { asyncHandler } from '@planning-inspectorate/core/util';
 import multer from 'multer';
 import { resolveCaseHeaderStatus } from '../../classes/status-tag-classes.ts';
 import { gateway2SetIds, gateway3SetIds } from '@pins/local-plans-database/src/seed/static-data/ids/document-set.ts';
-import { sortGateway3Submissions } from '#util/util.ts';
+import { getExaminationStages, sortGateway3Submissions } from '#util/util.ts';
 import { journeyQuestions } from './journey.ts';
 import { COMMON_CONSTS } from '../../classes/common-consts.ts';
 import { OverviewSaveController } from './save/overview-save-controller.ts';
@@ -25,7 +25,11 @@ import { Gateway1SaveController } from './save/gateway-1-save-controller.ts';
 import { Gateway2SaveController } from './save/gateway-2-save-controller.ts';
 import { Gateway3SaveController } from './save/gateway-3-save-controller.ts';
 import { ExaminationSaveController } from './save/examination-save-controller.ts';
-import { formatDateToString } from '../../../app/util/date.ts';
+import { formatDateToString } from '../../util/date.ts';
+import type { FileUploaderControllerOptions } from '@pins/local-plans-lib/forms/custom-components/file-uploader/upload-controller.ts';
+import { resolveSessionKey } from '@pins/local-plans-lib/forms/custom-components/file-uploader/upload-controller.ts';
+import { checkSoundUnsoundManuallySet } from '../../util/util.ts';
+import { pushAlertToSession } from '../../util/alert.ts';
 
 type ManageListAction = 'edit' | 'remove' | undefined;
 
@@ -127,6 +131,31 @@ export function updateCaseField(service: ManageService): SaveDataFn {
 				writeResponse = await new ExaminationSaveController(service, req, reference).prepareAndSave(data.answers);
 				break;
 			}
+			case COMMON_CONSTS.EXAMINATION_PAUSE_JOURNEY_ID: {
+				writeResponse = await new ExaminationSaveController(service, req, reference).prepareAndSave(data.answers);
+				// Tech debt: Would be good to simplify how case history is written - embedding within the save controller
+				// is ideal but will be tricky without tight coupling. For now this quick and dirty if-statement will do
+				if (writeResponse.writtenToDB) {
+					const question = String(req.params.question);
+					const matchedExaminationPauseQuestion = examinationPauseBaseUrls.find((prefix) =>
+						question.startsWith(prefix)
+					);
+					if (matchedExaminationPauseQuestion) {
+						pushAlertToSession(req, 'success', 'Changes saved');
+						const isExaminationRestartQuestion =
+							question.startsWith('examination-pause-end-date') ||
+							question.startsWith('examination-pause-restart-details');
+						const caseHistoryMessage = isExaminationRestartQuestion ? 'Plan restarted' : 'Plan paused';
+						const account = authSession.getAccount(req.session);
+						const currentUser = account?.name ?? 'Unknown';
+						await updateCaseHistory(service, req, db, { examinationPause: null }, {}, reference, currentUser, {
+							examinationPause: caseHistoryMessage
+						});
+						return;
+					}
+				}
+				break;
+			}
 			default: {
 				logger.info(`url - ${req.url} not found`);
 				return res.status(404).render('views/errors/404.njk');
@@ -214,15 +243,6 @@ export function buildGetJourneyMiddleware(
 		res.locals.planTitle = caseRecord.planTitle;
 		res.locals.reference = reference;
 
-		if (req.session.alertMessage) {
-			res.locals.alertMessage = req.session.alertMessage;
-			delete req.session.alertMessage;
-		}
-		if (req.session.alertMessageStatus) {
-			res.locals.alertMessageStatus = req.session.alertMessageStatus;
-			delete req.session.alertMessageStatus;
-		}
-
 		const journey1Data = await db.gateway1Info.findUnique({ where: { caseId: caseRecord.id } });
 		const journey2Data = await db.gateway2Info.findUnique({
 			where: { caseId: caseRecord.id },
@@ -247,12 +267,15 @@ export function buildGetJourneyMiddleware(
 			}
 		});
 
+		const examinationStatus = await getExaminationStages(service, caseRecord.id);
+
 		const headerStatus = resolveCaseHeaderStatus(
 			gateway2Documents,
 			gateway3Documents,
 			journey1Data,
 			journey2Data,
-			journey3Data?.submissions ?? []
+			journey3Data?.submissions ?? [],
+			examinationStatus
 		);
 		res.locals.headerStatusText = headerStatus.headerStatusText;
 		res.locals.headerStatusClasses = headerStatus.headerStatusClasses;
@@ -285,6 +308,31 @@ export function buildCheckReportMiddleware(service: ManageService, journeyId: st
 		);
 		res.render('views/layouts/submit-documents-check-your-answers', submissionCheckData);
 		return;
+	};
+}
+
+export function buildRemoveDocumentConfirmMiddleware(journeyId: string): AsyncRequestHandler {
+	return async (req, res) => {
+		const section = getParam(req.params.section);
+		const questionUrl = getParam(req.params.question);
+		const fileId = getParam(req.params.fileId);
+		const caseReference = getParam(req.params.reference);
+		const questionConfig = fileUploadQuestionConfigs.find((question) => question.url == questionUrl);
+		const file = questionConfig
+			? req.session.fileUploader?.[
+					fileUploaderCaseSessionKeyForField(req, questionConfig.fieldName)
+				]?.uploadedFiles?.find((uploadedFile: { id: string }) => uploadedFile.id === fileId)
+			: undefined;
+		if (!questionConfig || !file) {
+			return res.status(404).render('views/errors/404.njk');
+		}
+		const journeyUrl = `/case/${encodeURIComponent(caseReference)}/${encodeURIComponent(journeyId)}`;
+		res.render('views/layouts/remove-uploaded-document', {
+			caseReference,
+			fileName: file.fileName,
+			formAction: `${journeyUrl}/${encodeURIComponent(section)}/${encodeURIComponent(questionUrl)}/delete-document/${encodeURIComponent(fileId)}`,
+			backLink: `${journeyUrl}/${encodeURIComponent(section)}/${COMMON_CONSTS.EXAMINATION_REPORT_MANAGE_QUESTION}`
+		});
 	};
 }
 
@@ -382,13 +430,12 @@ async function formatCaseHistoryValue(service: ManageService, req: Request, ques
 	}
 
 	if (question == 'isSound') {
-		if (typeof value === 'boolean') {
-			return value ? 'Sound' : 'Unsound';
-		}
-		if (typeof value === 'string') {
-			return value == 'yes' ? 'Sound' : 'Unsound';
-		}
-		return value;
+		const planOutcomeLabels: Record<string, string> = {
+			sound: 'Sound',
+			'sound-with-modifications': 'Sound with modifications',
+			unsound: 'Unsound'
+		};
+		return typeof value === 'string' ? (planOutcomeLabels[value] ?? value) : value;
 	}
 
 	if (typeof value === 'boolean') {
@@ -615,13 +662,72 @@ export function issueGateway2Report(service: ManageService, journeyId: string): 
 				}
 			);
 			// Alert message is saved as a session variable and inserted into the view by buildGetJourneyMiddleware
-			req.session.alertMessage = 'Gateway 2 report issued';
-			req.session.alertMessageStatus = 'success';
+			pushAlertToSession(req, 'success', 'Gateway 2 report issued');
 		} else {
 			// Alert message is saved as a session variable and inserted into the view by buildGetJourneyMiddleware
-			req.session.alertMessage = 'Gateway 2 report already issued';
-			req.session.alertMessageStatus = 'important';
+			pushAlertToSession(req, 'important', 'Gateway 2 report already issued');
 		}
+		res.redirect(`/case/${encodeURIComponent(caseReference)}/${encodeURIComponent(journeyId)}`);
+		return;
+	};
+}
+
+export function issueExaminationReport(service: ManageService, journeyId: string): AsyncRequestHandler {
+	return async (req, res) => {
+		const caseReference = getParam(req.params.reference);
+		const caseId = await resolveCaseIdFromReference(service.db, caseReference);
+		const account = authSession.getAccount(req.session);
+		const currentUser = account?.name ?? 'Unknown';
+
+		const existingExaminationDetails = await service.db.examinationInfo.findUnique({
+			select: { soundUnsoundDate: true },
+			where: { caseId }
+		});
+		const returnToManage = req.session.examinationReportReturnToManage === true;
+		delete req.session.examinationReportReturnToManage;
+		if (existingExaminationDetails?.soundUnsoundDate && (req.query.returnTo !== 'check' || returnToManage)) {
+			const manuallySetInFirstSubmission = await checkSoundUnsoundManuallySet(service, caseId);
+			const reportIssuedDate = manuallySetInFirstSubmission ? existingExaminationDetails.soundUnsoundDate : new Date();
+			if (!manuallySetInFirstSubmission) {
+				await new ExaminationSaveController(service, req, caseReference).prepareAndSave({
+					soundUnsoundDate: reportIssuedDate
+				});
+			}
+			await updateCaseHistory(service, req, service.db, { examinationReport: null }, {}, caseReference, currentUser, {
+				examinationReport: `Examination report document added; report issued on ${await formatCaseHistoryValue(service, req, '', reportIssuedDate)}`
+			});
+			pushAlertToSession(req, 'success', 'Document added and notification sent');
+
+			// Go back to Manage docs page after document addition
+			res.redirect(
+				`/case/${encodeURIComponent(caseReference)}/${encodeURIComponent(journeyId)}/outcome/${questions.examinationReportManage.url}`
+			);
+			return;
+		}
+
+		const reportIssuedDate = existingExaminationDetails?.soundUnsoundDate ?? new Date();
+		if (!existingExaminationDetails?.soundUnsoundDate) {
+			await new ExaminationSaveController(service, req, caseReference).prepareAndSave({
+				soundUnsoundDate: reportIssuedDate
+			});
+		}
+		await updateCaseHistory(
+			service,
+			req,
+			service.db,
+			{
+				examinationReport: null // Will be overridden by overrideLabels
+			},
+			{},
+			caseReference,
+			currentUser,
+			{
+				examinationReport: `Examination report issued on ${await formatCaseHistoryValue(service, req, '', reportIssuedDate)}`
+			}
+		);
+		pushAlertToSession(req, 'success', 'Final report and supporting documents saved and notification sent');
+
+		// After first time exam doc upload, go back to examination tab
 		res.redirect(`/case/${encodeURIComponent(caseReference)}/${encodeURIComponent(journeyId)}`);
 		return;
 	};
@@ -663,12 +769,10 @@ export function issueGateway2WorkshopDocuments(service: ManageService, journeyId
 				}
 			);
 			// Alert message is saved as a session variable and inserted into the view by buildGetJourneyMiddleware
-			req.session.alertMessage = 'Workshop document(s) uploaded';
-			req.session.alertMessageStatus = 'success';
+			pushAlertToSession(req, 'success', 'Workshop document(s) uploaded');
 		} else {
 			// Alert message is saved as a session variable and inserted into the view by buildGetJourneyMiddleware
-			req.session.alertMessage = 'Gateway 2 workshopDocuments already issued';
-			req.session.alertMessageStatus = 'important';
+			pushAlertToSession(req, 'important', 'Gateway 2 workshopDocuments already issued');
 		}
 		res.redirect(`/case/${encodeURIComponent(caseReference)}/${journeyId}`);
 		return;
@@ -711,12 +815,10 @@ export function issueGateway1SLA(service: ManageService, journeyId: string): Asy
 				}
 			);
 			// Alert message is saved as a session variable and inserted into the view by buildGetJourneyMiddleware
-			req.session.alertMessage = 'Signed SLA uploaded. LPA can proceed to Gateway 2 submission';
-			req.session.alertMessageStatus = 'success';
+			pushAlertToSession(req, 'success', 'Signed SLA uploaded. LPA can proceed to Gateway 2 submission');
 		} else {
 			// Alert message is saved as a session variable and inserted into the view by buildGetJourneyMiddleware
-			req.session.alertMessage = 'SLA already issued';
-			req.session.alertMessageStatus = 'important';
+			pushAlertToSession(req, 'important', 'SLA already issued');
 		}
 		res.redirect(`/case/${encodeURIComponent(caseReference)}/${encodeURIComponent(journeyId)}`);
 		return;
@@ -779,12 +881,10 @@ export function issueGateway3Document(service: ManageService): AsyncRequestHandl
 				}
 			);
 			// Alert message is saved as a session variable and inserted into the view by buildGetJourneyMiddleware
-			req.session.alertMessage = 'Gateway 3 decision issued';
-			req.session.alertMessageStatus = 'success';
+			pushAlertToSession(req, 'success', 'Gateway 3 decision issued');
 		} else {
 			// Alert message is saved as a session variable and inserted into the view by buildGetJourneyMiddleware
-			req.session.alertMessage = 'Gateway 3 decision already issued';
-			req.session.alertMessageStatus = 'important';
+			pushAlertToSession(req, 'important', 'Gateway 3 decision already issued');
 		}
 		res.redirect(
 			`/case/${encodeURIComponent(caseReference)}/${encodeURIComponent(COMMON_CONSTS.GATEWAY_3_JOURNEY_ID)}`
@@ -807,8 +907,45 @@ export function redirectToFileUploaderQuestion(req: Request) {
 		return `${req.baseUrl}${planPath}/${COMMON_CONSTS.GATEWAY_2_JOURNEY_ID}/${req.params.section}/${req.params.question}`;
 	}
 	const journey = req.url.split(String(req.params.section))[0];
+	if (
+		req.params.question === COMMON_CONSTS.EXAMINATION_REPORT_QUESTION &&
+		req.params.fileId &&
+		req.body?.returnToManage === 'true'
+	) {
+		return `${req.baseUrl}${planPath}${journey}${req.params.section}/${COMMON_CONSTS.EXAMINATION_REPORT_MANAGE_QUESTION}`;
+	}
+	if (req.params.question === COMMON_CONSTS.EXAMINATION_REPORT_QUESTION && req.query?.returnTo === 'check') {
+		return `${req.baseUrl}${planPath}${journey}${req.params.section}/${req.params.question}?returnTo=check`;
+	}
 	return `${req.baseUrl}${planPath}${journey}${req.params.section}/${req.params.question}`;
 }
+
+/**
+ * Constructs a redirect URL for a case based on the provided request parameters and session data.
+ *
+ * @param {Request} req - The HTTP request object containing parameters, URL, and session data.
+ * @param {string} path - The base path to append to the generated URL.
+ * @param options
+ * @returns {string} The constructed redirect URL.
+ */
+export const redirectToChecks = (req: Request, path: string, options?: FileUploaderControllerOptions): string => {
+	const plan = req.params.reference;
+	const questionUrl = `/case/${plan}/${path}/${req.params.section}/${req.params.question}`;
+	const queryString = req.query?.returnTo === 'check' ? '?returnTo=check' : '';
+	if (!options) return `${questionUrl}${queryString}`;
+	const urlPathRoot = req.url.split('/')[1];
+	const session = req.session;
+	const sessionKey = resolveSessionKey(req, options);
+	const formFiles = session?.forms?.[urlPathRoot]
+		? session?.forms?.[urlPathRoot]
+		: (session.fileUploader?.[sessionKey]?.uploadedFiles ?? undefined);
+
+	if (Object.keys(formFiles).length === 0) {
+		return `${questionUrl}${queryString}`;
+	}
+
+	return `${questionUrl}/check${queryString}`;
+};
 
 export function handleMulterFileSizeError(err: Error, req: Request, res: Response, next: NextFunction) {
 	if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
@@ -941,6 +1078,56 @@ export function preprocessQuestionProperties(
 					delete questions[gateway3Decision].actionLink;
 					questions[gateway3Decision].formatSummaryValue = () => 'Not started';
 				}
+			}
+		}
+		if (journeyId == 'examination') {
+			// Format the Start date answer into a human-readable date
+			const hearingAnswers = _res.locals.journeyResponse.answers.hearings ?? [];
+			for (let i = 0; i < hearingAnswers.length; i++) {
+				hearingAnswers[i].hearingDate =
+					hearingAnswers[i].hearingDate && typeof hearingAnswers[i].hearingDate != 'string'
+						? formatDateToString(hearingAnswers[i].hearingDate)
+						: null;
+			}
+		}
+		if (journeyId == COMMON_CONSTS.EXAMINATION_JOURNEY_ID) {
+			const caseDetails = await service.db.case.findUnique({
+				include: {
+					examinationInfo: {
+						include: {
+							planPauseHistory: true
+						}
+					}
+				},
+				where: {
+					reference
+				}
+			});
+			const pauseDetails = caseDetails?.examinationInfo?.planPauseHistory;
+			if (!pauseDetails) {
+				throw new Error(`No pause details found for case reference '${reference}'`);
+			}
+			const pauseQuestionPrefixes = [
+				'examinationPauseStartDate',
+				'examinationPauseDetail',
+				'examinationPauseEndDate',
+				'examinationRestartDetail'
+			];
+			pauseQuestionPrefixes.forEach((prefix) => {
+				const questionName = `${prefix}-1`;
+				questions[questionName].actionLink = {
+					href: `/case/${reference}/examination-pause/pause-examination/${questions[questionName].url}`,
+					text: 'View'
+				};
+			});
+			for (let i = 2; i <= pauseDetails.length; i++) {
+				pauseQuestionPrefixes.forEach((prefix) => {
+					const questionName = `${prefix}-${i}`;
+					questions[questionName].actionLink = {
+						href: `/case/${reference}/examination-pause/pause-examination/${questions[questionName].url}`,
+						text: 'View'
+					};
+				});
 			}
 		}
 		next();
