@@ -55,6 +55,7 @@ import {
 	createGateway3Journey,
 	createExaminationJourney,
 	createExaminationHearingJourney,
+	createExaminationPauseJourney,
 	createGateway3ReportJourney
 } from './journey.ts';
 import multer from 'multer';
@@ -82,9 +83,11 @@ import { Gateway2TabHandler } from './overview-data-handlers/gateway-2-tab-handl
 import { Gateway3TabHandler } from './overview-data-handlers/gateway-3-tab-handler.ts';
 import { ExaminationTabHandler } from './overview-data-handlers/examination-tab-handler.ts';
 import type { OverviewPageLoadHandler } from './overview-data-handlers/overview-page-load-handler.ts';
-import { sortByCreatedDate } from '#util/util.ts';
+import { sortByDateColumn } from '#util/util.ts';
 import { Gateway3SubmissionHandler } from './overview-data-handlers/gateway-3-submission-handler.ts';
+import { ExaminationPauseHandler } from './overview-data-handlers/examination-pause-handler.ts';
 import { createFileSubmitUploadController } from '@pins/local-plans-lib/forms/custom-components/file-uploader/upload-controller.ts';
+import { pushAlertToSession } from '../../util/alert.ts';
 
 type JourneyFactory = (req: Request, response: JourneyResponse, questions: Record<string, any>) => Journey;
 
@@ -102,6 +105,7 @@ interface CaseJourneyConfig {
 	pageLoadHandler: new () => OverviewPageLoadHandler;
 	supportsManageList?: boolean;
 	supportsFileUpload?: boolean;
+	redirectToTaskListOnSuccess?: boolean;
 	saveController?: new (...args: any[]) => SaveController;
 }
 
@@ -181,9 +185,7 @@ function registerGateway2WorkshopJourney(
 				}
 			}
 		});
-
-		req.session.alertMessage = 'Workshop set up';
-		req.session.alertMessageStatus = 'success';
+		pushAlertToSession(req, 'success', 'Workshop set up');
 		if (req.session.lastQuestionUrl) {
 			delete req.session.lastQuestionUrl;
 		}
@@ -293,7 +295,7 @@ function registerExaminationHearingJourney(
 	const completeHearing = asyncHandler(async (req: Request, res: Response) => {
 		const reference = getParam(req.params.reference);
 		const hearingNumber = Number(getParam(req.params.hearingId));
-		const hearing = sortByCreatedDate(res.locals.journeyResponse.answers.hearings)[hearingNumber - 1];
+		const hearing = sortByDateColumn(res.locals.journeyResponse.answers.hearings, 'createdDate')[hearingNumber - 1];
 
 		const account = authSession.getAccount(req.session);
 		const currentUser = account?.name ?? 'Unknown';
@@ -311,9 +313,7 @@ function registerExaminationHearingJourney(
 				}
 			}
 		});
-
-		req.session.alertMessage = 'Hearing created';
-		req.session.alertMessageStatus = 'success';
+		pushAlertToSession(req, 'success', 'Hearing created');
 
 		if (req.session.lastQuestionUrl) {
 			delete req.session.lastQuestionUrl;
@@ -424,6 +424,7 @@ const CASE_JOURNEYS: CaseJourneyConfig[] = [
 		pageLoadHandler: OverviewTabHandler,
 		supportsManageList: true,
 		supportsFileUpload: false,
+		redirectToTaskListOnSuccess: true,
 		saveController: undefined
 	},
 	{
@@ -433,6 +434,7 @@ const CASE_JOURNEYS: CaseJourneyConfig[] = [
 		pageLoadHandler: Gateway1TabHandler,
 		supportsManageList: true,
 		supportsFileUpload: true,
+		redirectToTaskListOnSuccess: true,
 		saveController: Gateway1SaveController
 	},
 	{
@@ -442,6 +444,7 @@ const CASE_JOURNEYS: CaseJourneyConfig[] = [
 		pageLoadHandler: Gateway2TabHandler,
 		supportsManageList: true,
 		supportsFileUpload: true,
+		redirectToTaskListOnSuccess: true,
 		saveController: Gateway2SaveController
 	},
 	{
@@ -451,6 +454,7 @@ const CASE_JOURNEYS: CaseJourneyConfig[] = [
 		pageLoadHandler: Gateway2TabHandler,
 		supportsManageList: false,
 		supportsFileUpload: false,
+		redirectToTaskListOnSuccess: true,
 		saveController: Gateway2SaveController
 	},
 	{
@@ -459,6 +463,7 @@ const CASE_JOURNEYS: CaseJourneyConfig[] = [
 		createJourney: createGateway3Journey,
 		pageLoadHandler: Gateway3TabHandler,
 		supportsFileUpload: true,
+		redirectToTaskListOnSuccess: true,
 		saveController: Gateway3SaveController
 	},
 	{
@@ -467,6 +472,7 @@ const CASE_JOURNEYS: CaseJourneyConfig[] = [
 		createJourney: createGateway3ReportJourney,
 		pageLoadHandler: Gateway3SubmissionHandler,
 		supportsFileUpload: true,
+		redirectToTaskListOnSuccess: true,
 		saveController: Gateway3SaveController
 	},
 	{
@@ -476,6 +482,17 @@ const CASE_JOURNEYS: CaseJourneyConfig[] = [
 		pageLoadHandler: ExaminationTabHandler,
 		supportsManageList: true,
 		supportsFileUpload: true,
+		redirectToTaskListOnSuccess: true,
+		saveController: ExaminationSaveController
+	},
+	{
+		path: COMMON_CONSTS.EXAMINATION_PAUSE_JOURNEY_ID,
+		journeyId: COMMON_CONSTS.EXAMINATION_PAUSE_JOURNEY_ID,
+		createJourney: createExaminationPauseJourney,
+		pageLoadHandler: ExaminationPauseHandler,
+		supportsManageList: false,
+		supportsFileUpload: false,
+		redirectToTaskListOnSuccess: false,
 		saveController: ExaminationSaveController
 	},
 	{
@@ -549,7 +566,15 @@ function registerCaseJourney(
 	config: CaseJourneyConfig,
 	updateCase: ReturnType<typeof updateCaseField>
 ): void {
-	const { path, journeyId, createJourney, pageLoadHandler, supportsManageList, supportsFileUpload } = config;
+	const {
+		path,
+		journeyId,
+		createJourney,
+		pageLoadHandler,
+		supportsManageList,
+		supportsFileUpload,
+		redirectToTaskListOnSuccess
+	} = config;
 
 	const resolveQuestions = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
 		await getQuestions(service, req);
@@ -627,7 +652,7 @@ function registerCaseJourney(
 				res.locals.journey.taskListUrl = `${req.baseUrl}/${path}/outcome/${questions.examinationReport.url}/check?returnTo=check`;
 			}
 			const continueToReportUpload = isPlanOutcome && req.query.returnTo !== 'check' && !answers?.soundUnsoundDate;
-			buildSave(updateCase, !continueToReportUpload)(req, res, next);
+			buildSave(updateCase, redirectToTaskListOnSuccess && !continueToReportUpload)(req, res, next);
 		}
 	);
 	if (supportsFileUpload) {
@@ -710,8 +735,7 @@ function registerCaseJourney(
 							syncUploadAnswer(journeyId, req, questionConfig.fieldName, uploadedFiles);
 							logDocumentDeleted(service, req, questionConfig, uploadedFiles);
 							if (questionConfig.url === COMMON_CONSTS.EXAMINATION_REPORT_QUESTION) {
-								req.session.alertMessage = 'Document removed';
-								req.session.alertMessageStatus = 'success';
+								pushAlertToSession(req, 'success', 'Document removed');
 							}
 							const caseId = (req as UploadDocumentRequest).currentCase?.id;
 							if (
