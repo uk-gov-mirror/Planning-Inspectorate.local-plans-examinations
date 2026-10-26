@@ -8,7 +8,6 @@ import {
 	postMarkAsDeleteCase,
 	type UploadDocumentRequest,
 	fileUploadQuestionConfigs,
-	fileUploadQuestionUrls,
 	type FileUploadQuestion,
 	getRouteQuestionUrl,
 	fileUploaderCaseSessionKey,
@@ -24,7 +23,8 @@ import {
 	issueGateway2WorkshopDocuments,
 	redirectToChecks,
 	preprocessQuestionProperties,
-	handleMulterFileSizeError
+	handleMulterFileSizeError,
+	journeyFileUploadQuestionConfigs
 } from './controller.ts';
 import { type SaveController } from './save/save-controller.ts';
 import { Gateway1SaveController } from './save/gateway-1-save-controller.ts';
@@ -556,7 +556,7 @@ function registerCaseJourney(
 	const getJourneyResponse = buildGetJourneyMiddleware(service, journeyId, pageLoadHandler);
 
 	const fileUploadMiddleware = fileUploaderQuestionMiddleware({
-		questionUrls: fileUploadQuestionUrls,
+		questionUrls: journeyFileUploadQuestionConfigs[journeyId].map((elem) => elem.url),
 		sessionKey: fileUploaderCaseSessionKey
 	});
 

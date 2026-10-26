@@ -89,6 +89,7 @@ export class Gateway2TabHandler extends OverviewPageLoadHandler {
 		const journeyResponse = res.locals.journeyResponse as JourneyResponse;
 		journeyResponse.answers.gateway2Documents = documentsByCategory;
 		res.locals.journeyResponse = journeyResponse;
+		this.addVirusScanStatusToLocals(req, res, journeyId);
 		if (
 			req.method === 'POST' &&
 			(req.params.question === COMMON_CONSTS.GATEWAY_2_REPORT_QUESTION ||
