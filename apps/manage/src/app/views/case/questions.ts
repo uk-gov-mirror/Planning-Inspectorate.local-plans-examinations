@@ -1568,6 +1568,10 @@ caseQuestions.timetableGateway3ActualDate = {
 	...caseQuestions.gateway3ActualDate,
 	fieldName: 'gateway3ActualDate'
 };
+caseQuestions.timetableGateway3CompletionDate = {
+	...gateway3BaseQuestions.gateway3CompletionDate,
+	fieldName: 'gateway3CompletionDate'
+};
 
 export const fileUploadQuestionProperties = Object.fromEntries(
 	Object.entries(caseQuestions).filter(([, v]) => v.type === CUSTOM_COMPONENTS.FILE_UPLOADER)
@@ -1596,6 +1600,14 @@ Object.keys(examinationHearingQuestions).forEach((key) => {
 // The plan outcome / is sound question appears before the file upload so it's row must be hidden.
 questions.isSoundNavigation.taskList = false;
 questions.examinationReportManage.taskList = false;
+
+// Only editable once a submission has proceeded to examination (i.e. a date is present)
+const timetableGateway3CompletionDate = questions.timetableGateway3CompletionDate;
+const defaultGetAction = timetableGateway3CompletionDate.getAction;
+timetableGateway3CompletionDate.getAction = function (sectionSegment: string, journey: any, answer: unknown) {
+	if (!answer) return undefined;
+	return defaultGetAction.call(this, sectionSegment, journey, answer);
+};
 
 questions.examinationWebsite.formatAnswerForSummary = function (sectionSegment: string, journey: any, answer: string) {
 	// Prepend https:// to the answer if it doesn't already start with http:// or https://

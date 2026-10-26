@@ -574,9 +574,8 @@ export function createTimetableJourney(req: Request, response: JourneyResponse, 
 				.addQuestion(questions.reportPublishedDate),
 			new Section('Gateway 3', 'gateway-3')
 				.addQuestion(questions.timetableGateway3ExpectedDate)
-				.addQuestion(questions.timetableGateway3ActualDate),
-			// TODO which completion date to show?
-			//.addQuestion(questions[`gateway3CompletionDate-1`]),
+				.addQuestion(questions.timetableGateway3ActualDate)
+				.addQuestion(questions.timetableGateway3CompletionDate),
 			new Section('Examination', 'examination')
 				.addQuestion(questions.expectedSubmissionForExaminationDate)
 				.addQuestion(questions.submissionForExaminationDate)

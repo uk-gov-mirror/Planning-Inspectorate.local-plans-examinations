@@ -1,6 +1,7 @@
 import { JourneyResponse } from '@planning-inspectorate/dynamic-forms';
 import { OverviewPageLoadHandler, type PageLoadContext } from './overview-page-load-handler.ts';
 import { formatValue } from '../../../util/util.ts';
+import { GATEWAY_3_DECISION_ID } from '@pins/local-plans-database/src/seed/static-data/ids/case.ts';
 import { sortByCreatedDate } from '../../../../util/util.ts';
 
 export class TimetableTabHandler extends OverviewPageLoadHandler {
@@ -16,7 +17,8 @@ export class TimetableTabHandler extends OverviewPageLoadHandler {
 			include: { workshops: true }
 		});
 		const gateway3Data = await db.gateway3Info.findUnique({
-			where: { caseId: caseRecord.id }
+			where: { caseId: caseRecord.id },
+			include: { submissions: true }
 		});
 		const examinationData = await db.examinationInfo.findUnique({
 			where: { caseId: caseRecord.id },
@@ -27,6 +29,10 @@ export class TimetableTabHandler extends OverviewPageLoadHandler {
 
 		const workshops = sortByCreatedDate(gateway2Data?.workshops ?? []);
 		const hearings = sortByCreatedDate(examinationData?.hearings ?? []);
+		const proceedSubmission = gateway3Data?.submissions.find(
+			(submission) => submission.decision === GATEWAY_3_DECISION_ID.PROCEED_TO_EXAMINATION
+		);
+
 		res.locals.journeyResponse = new JourneyResponse(journeyId, '', {
 			...gateway1Data,
 			...gateway2Data,
@@ -36,6 +42,7 @@ export class TimetableTabHandler extends OverviewPageLoadHandler {
 			actualDate: gateway2Data?.actualDate,
 			gateway3ExpectedDate: gateway3Data?.expectedDate,
 			gateway3ActualDate: gateway3Data?.actualDate,
+			gateway3CompletionDate: proceedSubmission?.completionDate,
 			workshops,
 			hearings,
 			isSound

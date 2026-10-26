@@ -1,3 +1,4 @@
+import { GATEWAY_3_DECISION_ID } from '@pins/local-plans-database/src/seed/static-data/ids/case.ts';
 import { SaveController } from './save-controller.ts';
 import type { TimetableInput } from './save-inputs.ts';
 import { Gateway1SaveController } from './gateway-1-save-controller.ts';
@@ -23,7 +24,7 @@ const timetableGateway2Questions = new Set([
 const timetableGateway3Questions = new Set([
 	'gateway-3-expected-date',
 	'gateway-3-actual-date',
-	'gateway-3-completion-date'
+	'timetable-gateway-3-completion-date'
 ]);
 
 const timetableExaminationQuestions = new Set([
@@ -67,6 +68,14 @@ export class TimetableSaveController extends SaveController {
 		if (timetableGateway2Questions.has(question)) {
 			const controller = new Gateway2SaveController(this.service, this.req, this.caseReference);
 			await controller.prepareAndSave(answers);
+		}
+		if (question === 'timetable-gateway-3-completion-date') {
+			const caseId = await this.resolveCaseId();
+			await this.service.db.gateway3Submission.updateMany({
+				where: { gateway3Info: { caseId }, decision: GATEWAY_3_DECISION_ID.PROCEED_TO_EXAMINATION },
+				data: { completionDate: (answers as Record<string, any>).gateway3CompletionDate }
+			});
+			return true;
 		}
 		if (timetableGateway3Questions.has(question)) {
 			const controller = new Gateway3SaveController(this.service, this.req, this.caseReference);
