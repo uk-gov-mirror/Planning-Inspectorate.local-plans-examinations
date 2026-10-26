@@ -10,6 +10,7 @@ import type {
 } from './types.ts';
 import { MAX_NO_OF_FILES_TO_UPLOAD, TOTAL_FILE_UPLOAD_LIMIT, TOTAL_FILE_UPLOAD_LIMIT_LABEL } from './constants.ts';
 import { VIRUS_CHECK_STATUS_ID } from '@pins/local-plans-database/src/seed/static-data/ids/index.ts';
+import { virusScanStatusTag } from '@pins/local-plans-lib/forms/custom-components/file-uploader/virus-scan.ts';
 
 type CheckForValidationErrorsParams = Parameters<Question['checkForValidationErrors']>;
 type RequestWithFileUploaderCustomViewData = CheckForValidationErrorsParams[0] & {
@@ -180,16 +181,27 @@ export function fileUploadBulletListFormat(context: any, emptyValue = 'Not start
 		const meta = file.metadata as Record<string, unknown> | undefined;
 		return (typeof meta?.documentGuid === 'string' && meta.documentGuid) || file.id;
 	};
-
+	const virusBaseError =
+		'<p class="govuk-error-message"><span class="govuk-visually-hidden">Error:</span>FILE_NAME contains a virus. Remove the file and upload a different version.</p>';
 	if (files.length === 1) {
+		const fileName = escape(files[0].fileName);
 		const downloadUrl = `/case/${encodeURIComponent(context.journey.caseReference)}/${urlDownloadSegment}/${encodeURIComponent(getDocumentId(files[0]))}`;
-		return `<a class="govuk-link" href="${downloadUrl}">${escape(files[0].fileName)}</a>`;
+		const virusCheckStatus = virusScanStatusTag(answer[0].virusCheckStatus);
+		const href = virusCheckStatus ? '' : `href="${downloadUrl}"`;
+		const hasVirus = answer[0].virusCheckStatus === VIRUS_CHECK_STATUS_ID.AFFECTED;
+		const virusError = hasVirus ? virusBaseError.replace('FILE_NAME', fileName) : '';
+		return `${virusError}<a class="govuk-link" ${href}>${fileName}</a>${virusScanStatusTag(answer[0].virusCheckStatus)}`;
 	}
 
 	const listItems = files
 		.map((file) => {
+			const fileName = escape(file.fileName);
 			const downloadUrl = `/case/${encodeURIComponent(context.journey.caseReference)}/${urlDownloadSegment}/${encodeURIComponent(getDocumentId(file))}`;
-			return `<li><a class="govuk-link" href="${downloadUrl}">${escape(file.fileName)}</a></li>`;
+			const virusCheckStatus = virusScanStatusTag(file.virusCheckStatus);
+			const href = virusCheckStatus ? '' : `href="${downloadUrl}"`;
+			const hasVirus = file.virusCheckStatus === VIRUS_CHECK_STATUS_ID.AFFECTED;
+			const virusError = hasVirus ? virusBaseError.replace('FILE_NAME', fileName) : '';
+			return `<li>${virusError}<a class="govuk-link" ${href}>${escape(file.fileName)}</a>${virusScanStatusTag(file.virusCheckStatus)}</li>`;
 		})
 		.join('');
 
