@@ -61,20 +61,24 @@ export class TimetableSaveController extends SaveController {
 		const question = String(this.req.params.question);
 
 		if (timetableGateway1Questions.has(question)) {
-			const controller = await new Gateway1SaveController(this.service, this.req, this.caseReference);
-			controller.prepareAndSave(answers);
+			const controller = new Gateway1SaveController(this.service, this.req, this.caseReference);
+			await controller.prepareAndSave(answers);
 		}
 		if (timetableGateway2Questions.has(question)) {
-			const controller = await new Gateway2SaveController(this.service, this.req, this.caseReference);
-			controller.prepareAndSave(answers);
+			const controller = new Gateway2SaveController(this.service, this.req, this.caseReference);
+			await controller.prepareAndSave(answers);
 		}
 		if (timetableGateway3Questions.has(question)) {
-			const controller = await new Gateway3SaveController(this.service, this.req, this.caseReference);
-			controller.prepareAndSave(answers);
+			const controller = new Gateway3SaveController(this.service, this.req, this.caseReference);
+			const { gateway3ExpectedDate, gateway3ActualDate, ...rest } = answers as Record<string, any>;
+			const gateway3Answers = { ...rest };
+			if ('gateway3ExpectedDate' in answers) gateway3Answers.expectedDate = gateway3ExpectedDate;
+			if ('gateway3ActualDate' in answers) gateway3Answers.actualDate = gateway3ActualDate;
+			await controller.prepareAndSave(gateway3Answers);
 		}
 		if (timetableExaminationQuestions.has(question)) {
-			const controller = await new ExaminationSaveController(this.service, this.req, this.caseReference);
-			controller.prepareAndSave(answers);
+			const controller = new ExaminationSaveController(this.service, this.req, this.caseReference);
+			await controller.prepareAndSave(answers);
 		}
 
 		return false;

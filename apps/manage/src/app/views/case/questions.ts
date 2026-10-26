@@ -1560,6 +1560,15 @@ for (const key of ['isSound', 'soundUnsoundDate', 'adoptionDate', 'approvedForCI
 }
 caseQuestions.isSoundNavigation = { ...caseQuestions.isSound };
 
+caseQuestions.timetableGateway3ExpectedDate = {
+	...caseQuestions.gateway3ExpectedDate,
+	fieldName: 'gateway3ExpectedDate'
+};
+caseQuestions.timetableGateway3ActualDate = {
+	...caseQuestions.gateway3ActualDate,
+	fieldName: 'gateway3ActualDate'
+};
+
 export const fileUploadQuestionProperties = Object.fromEntries(
 	Object.entries(caseQuestions).filter(([, v]) => v.type === CUSTOM_COMPONENTS.FILE_UPLOADER)
 ) as Record<string, FileUploaderQuestionProps>;

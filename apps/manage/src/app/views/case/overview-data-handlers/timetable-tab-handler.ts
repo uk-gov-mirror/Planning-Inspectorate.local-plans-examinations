@@ -30,10 +30,14 @@ export class TimetableTabHandler extends OverviewPageLoadHandler {
 		res.locals.journeyResponse = new JourneyResponse(journeyId, '', {
 			...gateway1Data,
 			...gateway2Data,
-			workshops,
-			hearings,
 			...gateway3Data,
 			...examinationData,
+			expectedDate: gateway2Data?.expectedDate,
+			actualDate: gateway2Data?.actualDate,
+			gateway3ExpectedDate: gateway3Data?.expectedDate,
+			gateway3ActualDate: gateway3Data?.actualDate,
+			workshops,
+			hearings,
 			isSound
 		});
 
