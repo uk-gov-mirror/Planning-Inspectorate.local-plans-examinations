@@ -29,7 +29,7 @@ describe('Portal login email validation', () => {
 		portalLoginEmailPage.saveAndContinue();
 
 		portalLoginEmailPage.verifyErrorSummary(
-			ERROR_MESSAGES.UNRECOGNISED_EMAIL_SUMMARY,
+			ERROR_MESSAGES.THERE_IS_A_PROBLEM,
 			ERROR_MESSAGES.UNRECOGNISED_EMAIL_SUMMARY
 		);
 		portalLoginEmailPage.verifyFieldErrorContains(ERROR_MESSAGES.UNRECOGNISED_EMAIL);
