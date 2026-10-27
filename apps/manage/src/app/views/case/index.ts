@@ -977,12 +977,12 @@ function registerDeleteCaseJourney(router: IRouter, service: ManageService): voi
 	const getJourney = buildGetJourney((req, journeyResponse) =>
 		createDeleteCaseJourney(req, journeyResponse, questions)
 	);
-	
+
 	const setDeleteCaseSection = (req: Request, _res: Response, next: NextFunction) => {
 		req.params.section = COMMON_CONSTS.DELETE_CASE_SECTION;
 		next();
 	};
-	
+
 	router.get('/delete-case', (req, res) => {
 		clearDataFromSession({ req, journeyId });
 		res.redirect(req.baseUrl + firstQuestionPath);
