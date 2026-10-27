@@ -60,8 +60,10 @@ export async function seedStaticData(dbClient: PrismaClient) {
 		await upsertReferenceData({ delegate: dbClient.gateway3FrontOfficeStatus, input });
 	}
 
-	for (const input of EXAMINATION_STATUSES) {
-		await upsertReferenceData({ delegate: dbClient.examinationStatus, input });
+	if (dbClient.examinationStatus) {
+		for (const input of EXAMINATION_STATUSES) {
+			await upsertReferenceData({ delegate: dbClient.examinationStatus, input });
+		}
 	}
 
 	for (const input of AUTHORITY_STATUSES) {
