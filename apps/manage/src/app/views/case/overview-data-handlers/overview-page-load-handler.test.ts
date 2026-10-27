@@ -10,11 +10,11 @@ import { ExaminationTabHandler } from './examination-tab-handler.ts';
 
 describe('Case pause banners', () => {
 	for (const [journeyId, Handler] of [
-		['overview', OverviewTabHandler],
+		['edit-case-overview', OverviewTabHandler],
 		['gateway-1', Gateway1TabHandler],
 		['gateway-2', Gateway2TabHandler],
 		['gateway-3', Gateway3TabHandler],
-		['gateway-3-submission', Gateway3SubmissionHandler],
+		['gateway-3-report', Gateway3SubmissionHandler],
 		['examination', ExaminationTabHandler]
 	] as const) {
 		it(`shows the ${journeyId} banner on first load without leaking it to another case`, async () => {
