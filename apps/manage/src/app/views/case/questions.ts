@@ -44,7 +44,8 @@ import { sortByCreatedDate } from '#util/util.ts';
 import {
 	GATEWAY_SUBMISSION_FILE_UPLOAD_LIMIT_BYTES,
 	GATEWAY_2_WORKSHOP_DOCUMENTS_FILE_UPLOAD_LIMIT_BYTES,
-	SIGNED_SLA_FILE_UPLOAD_LIMIT_BYTES
+	SIGNED_SLA_FILE_UPLOAD_LIMIT_BYTES,
+	COMMON_CONSTS
 } from '../../classes/common-consts.ts';
 import { formatDateToString, parseDate } from '../../../app/util/date.ts';
 
@@ -612,6 +613,15 @@ const caseQuestions: Record<string, ManageQuestionConfig> = {
 		url: 'plan-title',
 		title: 'Plan title',
 		validators: [new RequiredValidator('Enter a plan title')]
+	},
+	deleteCaseWhy: {
+		type: COMPONENT_TYPES.SINGLE_LINE_INPUT,
+		question: 'Why do you want to delete this case?',
+		fieldName: 'deleteCaseWhy',
+		inputAttributes: { 'data-cy': 'delete-case-reason' },
+		url: COMMON_CONSTS.DELETE_CASE_REASON,
+		title: 'Reason for deletion',
+		validators: [new RequiredValidator('Enter a reason for deleting this case')]
 	},
 	planBand: {
 		type: COMPONENT_TYPES.RADIO,

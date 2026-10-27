@@ -150,3 +150,38 @@ describe('Examination hearing questions', () => {
 		assert.equal(daysRows[0].key, 'Do you know the expected number of days?');
 	});
 });
+
+describe('Delete case reason question', () => {
+	async function validateDeleteReason(deleteCaseWhy: unknown) {
+		const question = questions.deleteCaseWhy;
+		const request = { body: { deleteCaseWhy } };
+		for (const validator of question.validators) {
+			const chains = [validator.validate(question)].flat();
+			for (const chain of chains) await chain.run(request);
+		}
+		return validationResult(request).mapped();
+	}
+
+	it('is served from the delete case reason URL', () => {
+		const question = questions.deleteCaseWhy;
+
+		assert.equal(question.url, 'delete-case-reason');
+		assert.equal(question.fieldName, 'deleteCaseWhy');
+		assert.equal(question.title, 'Reason for deletion');
+		assert.equal(question.question, 'Why do you want to delete this case?');
+	});
+
+	for (const deleteCaseWhy of ['', undefined]) {
+		it(`rejects a missing reason (${JSON.stringify(deleteCaseWhy)})`, async () => {
+			const errors = await validateDeleteReason(deleteCaseWhy);
+
+			assert.equal(errors.deleteCaseWhy.msg, 'Enter a reason for deleting this case');
+		});
+	}
+
+	it('accepts a reason', async () => {
+		const errors = await validateDeleteReason('Created in error');
+
+		assert.deepEqual(Object.keys(errors), []);
+	});
+});

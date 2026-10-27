@@ -9,7 +9,8 @@ import {
 	createGateway2WorkshopJourney,
 	createExaminationJourney,
 	createExaminationHearingJourney,
-	createGateway3Journey
+	createGateway3Journey,
+	createDeleteCaseJourney
 } from './journey.ts';
 import { COMMON_CONSTS } from '../../classes/common-consts.ts';
 import { questions } from './questions.ts';
@@ -344,4 +345,53 @@ describe('createExaminationHearingJourney', () => {
 			}
 		});
 	}
+});
+
+describe('createDeleteCaseJourney', () => {
+	function createDeleteCaseJourneyForTest(session: Record<string, unknown> = {}) {
+		return createDeleteCaseJourney(
+			{ baseUrl: '/case/LP-TEST-001', params: { reference: 'LP-TEST-001' }, session } as unknown as Request,
+			new JourneyResponse(COMMON_CONSTS.DELETE_CASE_JOURNEY_ID, '', {}),
+			questions
+		);
+	}
+
+	it('asks for the delete reason in the delete-case section', () => {
+		const journey = createDeleteCaseJourneyForTest();
+		const [deleteCaseSection] = journey.sections;
+
+		assert.equal(journey.journeyId, COMMON_CONSTS.DELETE_CASE_JOURNEY_ID);
+		assert.equal(journey.sections.length, 1);
+		assert.equal(deleteCaseSection.segment, COMMON_CONSTS.DELETE_CASE_SECTION);
+		assert.deepEqual(
+			deleteCaseSection.questions.map((question) => question.fieldName),
+			['deleteCaseWhy']
+		);
+	});
+
+	it('builds delete case URLs without repeating the delete-case segment', () => {
+		const journey = createDeleteCaseJourneyForTest();
+
+		assert.equal(journey.baseUrl, '/case/LP-TEST-001');
+		assert.equal(journey.taskListUrl, '/case/LP-TEST-001/delete-case/check');
+		assert.equal(journey.taskListTemplate, 'views/layouts/delete-case-check.njk');
+		assert.equal(
+			journey.getCurrentQuestionUrl(COMMON_CONSTS.DELETE_CASE_SECTION, COMMON_CONSTS.DELETE_CASE_REASON),
+			'/case/LP-TEST-001/delete-case/delete-case-reason'
+		);
+	});
+
+	it('links the reason page back to the case overview', () => {
+		const journey = createDeleteCaseJourneyForTest();
+
+		assert.equal(journey.initialBackLink, '/case/LP-TEST-001/overview');
+	});
+
+	it('marks the delete case journey as the current journey', () => {
+		const session: Record<string, unknown> = {};
+
+		createDeleteCaseJourneyForTest(session);
+
+		assert.equal(session.currentJourney, COMMON_CONSTS.DELETE_CASE_JOURNEY_ID);
+	});
 });
