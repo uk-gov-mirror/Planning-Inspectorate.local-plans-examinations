@@ -59,7 +59,8 @@ export abstract class SubmissionCheck {
 	protected formatDocuments(
 		uploadedFiles: UploadedFile[],
 		documentDownloadBaseUrl: string,
-		documentChangeBaseUrl: string
+		documentChangeBaseUrl: string,
+		query?: string
 	) {
 		const answersToReview: { name: string; value: string; url: string }[] = [];
 		let documentCounter = 1;
@@ -68,7 +69,8 @@ export abstract class SubmissionCheck {
 			if (!file.metadata?.documentGuid) {
 				throw Error(`documentGuid is missing for document with name ${file.fileName}, path ${file.path}`);
 			}
-			const changeUrl = `${documentChangeBaseUrl}`;
+			const queryString = query ? `?${query}` : '';
+			const changeUrl = `${documentChangeBaseUrl}${queryString}`;
 			answersToReview.push({
 				name: `Document ${documentCounter}`,
 				value: fileUploadDownloadFormat(file, downloadUrl),
