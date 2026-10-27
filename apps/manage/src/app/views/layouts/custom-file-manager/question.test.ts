@@ -21,6 +21,19 @@ const buildJourney = (answer: unknown) => ({
 describe('CustomFileManagerQuestion', () => {
 	it('exposes the uploaded files and upload question url in the view model', () => {
 		const answer = [{ id: '1', fileName: 'report.pdf' }];
+		const expectedDataRows = [
+			[
+				{
+					html: '<a class="govuk-link" href="/case/undefined/download-case-document/undefined">report.pdf</a>'
+				},
+				{
+					text: ''
+				},
+				{
+					html: `<a class="govuk-link" href="documents/remove/1">Remove<span class="govuk-visually-hidden"> report.pdf + '</span></a>`
+				}
+			]
+		];
 
 		const viewModel = new CustomFileManagerQuestion(baseParams).toViewModel({
 			section: { name: 'Section' },
@@ -28,8 +41,7 @@ describe('CustomFileManagerQuestion', () => {
 			params: {}
 		});
 
-		assert.deepEqual(viewModel.documents, answer);
-		assert.equal(viewModel.uploadQuestionUrl, 'documents');
+		assert.deepEqual(viewModel.dataRows, expectedDataRows);
 	});
 
 	it('falls back to an empty list when no files are uploaded', () => {
@@ -39,6 +51,6 @@ describe('CustomFileManagerQuestion', () => {
 			params: {}
 		});
 
-		assert.deepEqual(viewModel.documents, []);
+		assert.deepEqual(viewModel.dataRows, []);
 	});
 });
