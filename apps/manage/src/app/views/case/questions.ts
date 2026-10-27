@@ -48,7 +48,6 @@ import {
 	COMMON_CONSTS
 } from '../../classes/common-consts.ts';
 import { formatDateToString, parseDate } from '../../../app/util/date.ts';
-import { COMMON_CONSTS } from '../../classes/common-consts.ts';
 
 type ManageQuestionConfig = BaseQuestionProps & Record<string, any>;
 

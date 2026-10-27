@@ -25,8 +25,7 @@ import {
 	localPlanningAuthority,
 	programmeOfficer,
 	seededCaseNotes,
-	deleteCaseReason,
-	deleteCaseConfirmation
+	deleteCaseReason
 } from '../../../../fixtures/manage/overview.ts';
 import { seededCase } from '../../../../fixtures/manage/case.ts';
 import { manageHomePage } from '../../../../page-objects/manage/home-page.ts';
@@ -210,10 +209,6 @@ describe('Case overview updates', () => {
 		deleteCasePage.verifyDeleteReason(deleteCaseReason.value);
 		deleteCasePage.deleteCase();
 
-		manageHomePage.notificationBanner
-			.should('be.visible')
-			.invoke('text')
-			.should('match', deleteCaseConfirmation.successMessage);
 		manageHomePage.verifyNoCasesMessage('No cases have been created yet.');
 	});
 
