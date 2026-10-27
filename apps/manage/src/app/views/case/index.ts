@@ -977,13 +977,12 @@ function registerDeleteCaseJourney(router: IRouter, service: ManageService): voi
 	const getJourney = buildGetJourney((req, journeyResponse) =>
 		createDeleteCaseJourney(req, journeyResponse, questions)
 	);
-	// The URL has no :section segment, so tell the forms library which section the question is in
+	
 	const setDeleteCaseSection = (req: Request, _res: Response, next: NextFunction) => {
 		req.params.section = COMMON_CONSTS.DELETE_CASE_SECTION;
 		next();
 	};
-
-	// Entry point used by the "Delete case" button on the overview
+	
 	router.get('/delete-case', (req, res) => {
 		clearDataFromSession({ req, journeyId });
 		res.redirect(req.baseUrl + firstQuestionPath);
