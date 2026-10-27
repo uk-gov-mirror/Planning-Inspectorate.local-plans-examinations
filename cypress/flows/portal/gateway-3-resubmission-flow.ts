@@ -1,7 +1,7 @@
 import { gateway3ResubmissionPage } from '../../page-objects/portal/gw3-application/gateway-3-resubmission-page.ts';
 import { resubmissionDocumentsPage } from '../../page-objects/portal/gw3-application/gateway-3-uploads-page.ts';
-import { gateway3DeclarationPage } from '../../page-objects/portal/gw3-application/declaration-page.ts';
-import { gateway3SubmissionCompletePage } from '../../page-objects/portal/gw3-application/gateway-3-submission-complete-page.ts';
+import { gateway3ResubmissionDeclarationPage } from '../../page-objects/portal/gw3-application/gateway-3-resubmission-declaration-page.ts';
+import { gateway3ResubmissionSubmissionCompletePage } from '../../page-objects/portal/gw3-application/gateway-3-resubmission-submission-complete-page.ts';
 
 // Submission 1 data comes from both seedGateway3Submitted and seedGateway3Resubmission
 const SUBMISSION_1_COMPLETION_DATE = new Date('2026-10-01T12:00:00.000Z');
@@ -34,10 +34,10 @@ export const submitGateway3Resubmission = (planReference: string, fileName: stri
 	gateway3ResubmissionPage.verifyUploadedDocument(fileName);
 	gateway3ResubmissionPage.submitButton.click();
 
-	gateway3DeclarationPage.verifyLoaded();
-	gateway3DeclarationPage.confirmSubmissionButton.click();
+	gateway3ResubmissionDeclarationPage.verifyLoaded();
+	gateway3ResubmissionDeclarationPage.confirmSubmissionButton.click();
 
-	gateway3SubmissionCompletePage.verifyLoaded();
+	gateway3ResubmissionSubmissionCompletePage.verifyLoaded();
 };
 
 // FO submits submission 2, then the BO (seed) triggers resubmission 3
