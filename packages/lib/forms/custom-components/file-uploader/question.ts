@@ -181,27 +181,16 @@ export function fileUploadBulletListFormat(context: any, emptyValue = 'Not start
 		const meta = file.metadata as Record<string, unknown> | undefined;
 		return (typeof meta?.documentGuid === 'string' && meta.documentGuid) || file.id;
 	};
-	const virusBaseError =
-		'<p class="govuk-error-message"><span class="govuk-visually-hidden">Error:</span>FILE_NAME contains a virus. Remove the file and upload a different version.</p>';
 	if (files.length === 1) {
-		const fileName = escape(files[0].fileName);
 		const downloadUrl = `/case/${encodeURIComponent(context.journey.caseReference)}/${urlDownloadSegment}/${encodeURIComponent(getDocumentId(files[0]))}`;
-		const virusCheckStatus = virusScanStatusTag(answer[0].virusCheckStatus);
-		const href = virusCheckStatus ? '' : `href="${downloadUrl}"`;
-		const hasVirus = answer[0].virusCheckStatus === VIRUS_CHECK_STATUS_ID.AFFECTED;
-		const virusError = hasVirus ? virusBaseError.replace('FILE_NAME', fileName) : '';
-		return `${virusError}<a class="govuk-link" ${href}>${fileName}</a>${virusScanStatusTag(answer[0].virusCheckStatus)}`;
+		return fileUploadDownloadFormat(files[0], downloadUrl);
 	}
 
 	const listItems = files
 		.map((file) => {
-			const fileName = escape(file.fileName);
 			const downloadUrl = `/case/${encodeURIComponent(context.journey.caseReference)}/${urlDownloadSegment}/${encodeURIComponent(getDocumentId(file))}`;
-			const virusCheckStatus = virusScanStatusTag(file.virusCheckStatus);
-			const href = virusCheckStatus ? '' : `href="${downloadUrl}"`;
-			const hasVirus = file.virusCheckStatus === VIRUS_CHECK_STATUS_ID.AFFECTED;
-			const virusError = hasVirus ? virusBaseError.replace('FILE_NAME', fileName) : '';
-			return `<li>${virusError}<a class="govuk-link" ${href}>${escape(file.fileName)}</a>${virusScanStatusTag(file.virusCheckStatus)}</li>`;
+			const formattedAnswer = fileUploadDownloadFormat(file, downloadUrl);
+			return `<li>${formattedAnswer}</li>`;
 		})
 		.join('');
 
@@ -213,6 +202,17 @@ export function fileUploadCountFormat(context: any): string {
 	const files = Array.isArray(answer) ? (answer as UploadedFile[]) : [];
 	const pluralCharacter = files.length != 1 ? 's' : '';
 	return `<ul class="govuk-list">${files.length} document${pluralCharacter}</ul>`;
+}
+
+export function fileUploadDownloadFormat(file: UploadedFile, downloadUrl: string): string {
+	const virusBaseError =
+		'<p class="govuk-error-message"><span class="govuk-visually-hidden">Error:</span>FILE_NAME contains a virus. Remove the file and upload a different version.</p>';
+	const fileName = escape(file.fileName);
+	const virusCheckStatus = virusScanStatusTag(file.virusCheckStatus);
+	const href = virusCheckStatus ? '' : `href="${downloadUrl}"`;
+	const hasVirus = file.virusCheckStatus === VIRUS_CHECK_STATUS_ID.AFFECTED;
+	const virusError = hasVirus ? virusBaseError.replace('FILE_NAME', fileName) : '';
+	return `${virusError}<a class="govuk-link" ${href}>${fileName}</a>${virusScanStatusTag(file.virusCheckStatus)}`;
 }
 
 /**
