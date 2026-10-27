@@ -9,6 +9,7 @@ export const COMMON_CONSTS = {
 	EXAMINATION_HEARING_JOURNEY_ID: 'examination-hearing',
 	EXAMINATION_REPORT_QUESTION: 'examination-report',
 	EXAMINATION_REPORT_MANAGE_QUESTION: 'examination-report-manage',
+	EXAMINATION_PAUSE_JOURNEY_ID: 'examination-pause',
 	OVERVIEW: 'overview',
 	GATEWAY_2_INFO: 'gateway2Info',
 	GATEWAY_3_INFO: 'gateway3Info',
@@ -34,6 +35,7 @@ export const COMMON_CONSTS = {
 	GATEWAY_3_DECISION_QUESTION: 'gateway-3-decision',
 	GATEWAY_3_DOCUMENT_QUESTION: 'gateway-3-document',
 	GATEWAY_3_REPORT_ISSUED_DATE_QUESTION: 'gateway-3-report-issued-date',
+	NUM_EXAM_PAUSE_QUESTIONS: 200,
 	DELETE_CASE_JOURNEY_ID: 'delete-case',
 	DELETE_CASE_SECTION: 'delete-case',
 	DELETE_CASE_REASON: 'delete-case-reason'
