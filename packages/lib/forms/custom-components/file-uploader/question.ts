@@ -212,7 +212,7 @@ export function fileUploadDownloadFormat(file: UploadedFile, downloadUrl: string
 	const href = virusCheckStatus ? '' : `href="${downloadUrl}"`;
 	const hasVirus = file.virusCheckStatus === VIRUS_CHECK_STATUS_ID.AFFECTED;
 	const virusError = hasVirus ? virusBaseError.replace('FILE_NAME', fileName) : '';
-	return `${virusError}<a class="govuk-link" ${href}>${fileName}</a>${virusScanStatusTag(file.virusCheckStatus)}`;
+	return `${virusError}<a class="govuk-link" ${href}>${fileName}</a>${virusCheckStatus ? ' ' + virusCheckStatus : ''}`;
 }
 
 /**
