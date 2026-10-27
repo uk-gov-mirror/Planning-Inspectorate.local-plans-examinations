@@ -11,6 +11,19 @@ import { COMMON_CONSTS } from '../../../classes/common-consts.ts';
 import { fileUploadQuestionProperties } from '../questions.ts';
 import { sortGateway3Submissions } from '#util/util.ts';
 
+export const fileUploadQuestions: string[] = [
+	COMMON_CONSTS.EXAMINATION_REPORT_QUESTION,
+	COMMON_CONSTS.GATEWAY_2_REPORT_QUESTION,
+	COMMON_CONSTS.GATEWAY_2_WORKSHOP_DOCUMENTS_QUESTION,
+	COMMON_CONSTS.SIGNED_SLA_QUESTION
+];
+
+export const repeatableUploadFieldNames: string[] = ['gateway3Documents'];
+
+export function isRepeatableUploadFieldName(fieldName: string): boolean {
+	return repeatableUploadFieldNames.some((name) => fieldName.startsWith(`${name}-`));
+}
+
 export async function getOverviewData(db: PrismaClient, reference: string) {
 	return db.case.findUnique({
 		where: { reference },
@@ -119,10 +132,7 @@ async function addUploadedDocumentDetailsToAnswers(
 			: await DocumentUtil.loadUploadedDocuments(service, currentCase.id, documentSetId);
 		if (
 			isUploadPages &&
-			(questionConfig.url === COMMON_CONSTS.EXAMINATION_REPORT_QUESTION ||
-				questionConfig.url === COMMON_CONSTS.GATEWAY_2_REPORT_QUESTION ||
-				questionConfig.url === COMMON_CONSTS.GATEWAY_2_WORKSHOP_DOCUMENTS_QUESTION ||
-				questionConfig.url === COMMON_CONSTS.SIGNED_SLA_QUESTION)
+			(fileUploadQuestions.includes(questionConfig.url) || isRepeatableUploadFieldName(questionConfig.fieldName))
 		) {
 			uploadedFiles.unshift(...(await DocumentUtil.loadUploadedDocuments(service, currentCase.id, documentSetId)));
 		}
