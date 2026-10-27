@@ -2,7 +2,7 @@ import { JourneyResponse } from '@planning-inspectorate/dynamic-forms';
 import { OverviewPageLoadHandler, type PageLoadContext } from './overview-page-load-handler.ts';
 import { formatValue } from '../../../util/util.ts';
 import { GATEWAY_3_DECISION_ID } from '@pins/local-plans-database/src/seed/static-data/ids/case.ts';
-import { sortByCreatedDate } from '../../../../util/util.ts';
+import { sortByDateColumn } from '../../../../util/util.ts';
 
 export class TimetableTabHandler extends OverviewPageLoadHandler {
 	public async handle(context: PageLoadContext): Promise<void> {
@@ -27,8 +27,8 @@ export class TimetableTabHandler extends OverviewPageLoadHandler {
 
 		const isSound = formatValue(examinationData?.isSound);
 
-		const workshops = sortByCreatedDate(gateway2Data?.workshops ?? []);
-		const hearings = sortByCreatedDate(examinationData?.hearings ?? []);
+		const workshops = sortByDateColumn(gateway2Data?.workshops ?? [], 'createdDate');
+		const hearings = sortByDateColumn(examinationData?.hearings ?? [], 'createdDate');
 		const proceedSubmission = gateway3Data?.submissions.find(
 			(submission) => submission.decision === GATEWAY_3_DECISION_ID.PROCEED_TO_EXAMINATION
 		);
