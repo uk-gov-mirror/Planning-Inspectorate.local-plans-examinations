@@ -477,13 +477,25 @@ export function buildPostDeclarationPage(service: PortalService): RequestHandler
 			return res.status(500).send('No pending submission found');
 		}
 
+		const caseId = currentCase?.id as string | undefined;
+		if (!caseId) {
+			service.logger.error(`No case loaded for resubmission declaration ${planReference ?? ''}`);
+			return res.status(500).send('No case found');
+		}
+
 		const completionDate = new Date();
 
 		try {
-			await service.db.gateway3Submission.update({
-				where: { id: currentSubmission.id },
-				data: { completionDate }
-			});
+			await service.db.$transaction([
+				service.db.gateway3Submission.update({
+					where: { id: currentSubmission.id },
+					data: { completionDate }
+				}),
+				service.db.gateway3Info.update({
+					where: { caseId },
+					data: { actualDate: completionDate }
+				})
+			]);
 		} catch (error) {
 			service.logger.error({ error }, `Failed to complete resubmission for case ${planReference ?? ''}`);
 			return res.status(500).send('Failed to record submission');

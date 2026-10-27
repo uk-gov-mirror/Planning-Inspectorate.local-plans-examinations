@@ -806,11 +806,15 @@ describe('buildGetDeclarationPage', () => {
 });
 
 describe('buildPostDeclarationPage', () => {
-	it('updates the current submission with a completion date and redirects', async () => {
-		const updateMock = mock.fn(async () => ({}));
+	it('updates the submission and gateway3Info.actualDate in a transaction and redirects', async () => {
+		const submissionUpdateMock = mock.fn(async () => ({}));
+		const gateway3InfoUpdateMock = mock.fn(async () => ({}));
+		const transactionMock = mock.fn(async (updates: unknown[]) => Promise.all(updates));
 		const mockService = {
 			db: {
-				gateway3Submission: { update: updateMock }
+				$transaction: transactionMock,
+				gateway3Submission: { update: submissionUpdateMock },
+				gateway3Info: { update: gateway3InfoUpdateMock }
 			},
 			logger: { error: mock.fn() }
 		};
@@ -818,6 +822,7 @@ describe('buildPostDeclarationPage', () => {
 		const req = {
 			params: { planReference: 'PLAN-001' },
 			currentCase: {
+				id: 'case-1',
 				gateway3Info: {
 					submissions: [
 						{
@@ -834,13 +839,28 @@ describe('buildPostDeclarationPage', () => {
 
 		await handler(req, res, () => {});
 
-		// Should have called update on the placeholder submission
-		assert.strictEqual(updateMock.mock.callCount(), 1);
-		const updateCall = (
-			updateMock.mock.calls as unknown as { arguments: [{ where: { id: string }; data: { completionDate: Date } }] }[]
+		// Should use a transaction
+		assert.strictEqual(transactionMock.mock.callCount(), 1);
+
+		// Should have updated the placeholder submission with a completionDate
+		assert.strictEqual(submissionUpdateMock.mock.callCount(), 1);
+		const submissionUpdateCall = (
+			submissionUpdateMock.mock.calls as unknown as {
+				arguments: [{ where: { id: string }; data: { completionDate: Date } }];
+			}[]
 		)[0].arguments[0];
-		assert.strictEqual(updateCall.where.id, 'sub-2');
-		assert.ok(updateCall.data.completionDate instanceof Date);
+		assert.strictEqual(submissionUpdateCall.where.id, 'sub-2');
+		assert.ok(submissionUpdateCall.data.completionDate instanceof Date);
+
+		// Should have updated gateway3Info.actualDate
+		assert.strictEqual(gateway3InfoUpdateMock.mock.callCount(), 1);
+		const gateway3InfoUpdateCall = (
+			gateway3InfoUpdateMock.mock.calls as unknown as {
+				arguments: [{ where: { caseId: string }; data: { actualDate: Date } }];
+			}[]
+		)[0].arguments[0];
+		assert.strictEqual(gateway3InfoUpdateCall.where.caseId, 'case-1');
+		assert.strictEqual(gateway3InfoUpdateCall.data.actualDate, submissionUpdateCall.data.completionDate);
 
 		// Should redirect to submission complete
 		const redirectCall = calls.find((c) => c.method === 'redirect');
@@ -850,13 +870,18 @@ describe('buildPostDeclarationPage', () => {
 
 	it('returns 500 when no pending submission exists', async () => {
 		const mockService = {
-			db: { gateway3Submission: { update: mock.fn() } },
+			db: {
+				$transaction: mock.fn(),
+				gateway3Submission: { update: mock.fn() },
+				gateway3Info: { update: mock.fn() }
+			},
 			logger: { error: mock.fn() }
 		};
 		const handler = buildPostDeclarationPage(mockService as unknown as Parameters<typeof buildPostDeclarationPage>[0]);
 		const req = {
 			params: { planReference: 'PLAN-001' },
 			currentCase: {
+				id: 'case-1',
 				gateway3Info: {
 					submissions: [
 						{
@@ -865,6 +890,35 @@ describe('buildPostDeclarationPage', () => {
 							decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED
 						}
 					]
+				}
+			}
+		} as unknown as Request;
+		const { res, calls } = buildMockResponse();
+		(res as unknown as Record<string, unknown>).send = (body: string) => {
+			calls.push({ method: 'send', args: [body] });
+		};
+
+		await handler(req, res, () => {});
+
+		const statusCall = calls.find((c) => c.method === 'status');
+		assert.strictEqual(statusCall?.args[0], 500);
+	});
+
+	it('returns 500 when no caseId is available', async () => {
+		const mockService = {
+			db: {
+				$transaction: mock.fn(),
+				gateway3Submission: { update: mock.fn() },
+				gateway3Info: { update: mock.fn() }
+			},
+			logger: { error: mock.fn() }
+		};
+		const handler = buildPostDeclarationPage(mockService as unknown as Parameters<typeof buildPostDeclarationPage>[0]);
+		const req = {
+			params: { planReference: 'PLAN-001' },
+			currentCase: {
+				gateway3Info: {
+					submissions: [{ id: 'sub-1', completionDate: null, decision: null }]
 				}
 			}
 		} as unknown as Request;
