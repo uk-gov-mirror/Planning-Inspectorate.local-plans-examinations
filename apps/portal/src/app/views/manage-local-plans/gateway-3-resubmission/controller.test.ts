@@ -166,6 +166,55 @@ describe('buildGetResubmissionPage', () => {
 		assert.strictEqual(data.backLinkUrl, '/manage-local-plans/PLAN-001');
 		assert.strictEqual(data.saveAndComeBackUrl, '/manage-local-plans/PLAN-001');
 	});
+
+	it('resolves uploaded document download URLs from DB documents when session metadata lacks documentGuid', () => {
+		const handler = buildGetResubmissionPage();
+		const req = {
+			params: { planReference: 'PLAN-001' },
+			currentCase: {
+				planTitle: 'Test Plan',
+				gateway3Info: {
+					submissions: [
+						{ completionDate: new Date('2026-10-01'), decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED },
+						{ completionDate: null, decision: null }
+					]
+				},
+				documents: [
+					{
+						guid: 'db-doc-guid-1',
+						name: 'case-id/gateway-3-document-2/uuid-file1.pdf',
+						documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_2,
+						latestDocumentVersion: { originalFilename: 'file1.pdf', fileName: 'file1.pdf', dateCreated: null }
+					}
+				]
+			},
+			session: {
+				fileUploader: {
+					'PLAN-001:resubmissionDocuments:2': {
+						uploadedFiles: [
+							{
+								id: 'case-id/gateway-3-document-2/uuid-file1.pdf',
+								fileName: 'file1.pdf',
+								metadata: { journeyId: 'gateway3-resubmission' }
+							}
+						]
+					}
+				}
+			}
+		} as unknown as Request;
+		const { res, calls } = buildMockResponse();
+
+		handler(req, res, () => {});
+
+		const data = calls[0].args[1] as Record<string, unknown>;
+		const uploadedDocs = data.uploadedDocuments as { fileName: string; downloadUrl: string }[];
+		assert.strictEqual(uploadedDocs.length, 1);
+		assert.strictEqual(uploadedDocs[0].fileName, 'file1.pdf');
+		assert.strictEqual(
+			uploadedDocs[0].downloadUrl,
+			'/manage-local-plans/PLAN-001/gateway-3-resubmission/download-document/db-doc-guid-1'
+		);
+	});
 });
 
 describe('buildPostResubmission', () => {
@@ -215,7 +264,10 @@ describe('buildPostResubmission', () => {
 		handler(req, res, () => {});
 
 		assert.strictEqual(calls[0].method, 'redirect');
-		assert.ok((calls[0].args[0] as string).includes('declaration'));
+		assert.ok(
+			(calls[0].args[0] as string).includes('gateway-3-resubmission/declaration'),
+			'expected resubmission-specific declaration route'
+		);
 	});
 });
 
@@ -411,6 +463,7 @@ describe('buildGetPreviousSubmissionPage', () => {
 				guid: 'report-guid',
 				name: 'GW3Report.pdf',
 				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_1,
+				isDeleted: false,
 				latestDocumentVersion: {
 					originalFilename: 'GW3Report.pdf',
 					fileName: 'GW3Report.pdf',
@@ -421,6 +474,7 @@ describe('buildGetPreviousSubmissionPage', () => {
 				guid: 'plan-guid',
 				name: 'proposed-local-plan.pdf',
 				documentSetId: DOCUMENT_SET_ID.G3_PROPOSED_LOCAL_PLAN,
+				isDeleted: false,
 				latestDocumentVersion: {
 					originalFilename: 'proposed-local-plan.pdf',
 					fileName: 'proposed-local-plan.pdf',
@@ -442,10 +496,10 @@ describe('buildGetPreviousSubmissionPage', () => {
 		assert.strictEqual(data.submitter, 'lpa@example.com');
 		assert.strictEqual(data.reportSubmissionNumber, 1);
 
-		// Should have report document
-		const reportDoc = data.reportDocument as Record<string, unknown>;
-		assert.ok(reportDoc);
-		assert.strictEqual(reportDoc.fileName, 'GW3Report.pdf');
+		// Should have report documents
+		const reportDocs = data.reportDocuments as Record<string, unknown>[];
+		assert.strictEqual(reportDocs.length, 1);
+		assert.strictEqual(reportDocs[0].fileName, 'GW3Report.pdf');
 
 		// Should have required and optional document sections
 		const sections = data.documentSections as { heading: string; documents: unknown[] }[];
@@ -464,7 +518,7 @@ describe('buildGetPreviousSubmissionPage', () => {
 		assert.strictEqual(data.backLinkUrl, '/manage-local-plans/PLAN-001/gateway-3-resubmission');
 	});
 
-	it('renders submission 2 detail page with resubmission documents and previous submissions', () => {
+	it('renders submission 2 with report and LPA uploads from g3-document-2', () => {
 		const handler = buildGetPreviousSubmissionPage();
 		const submissions = [
 			{ completionDate: new Date('2026-10-01T12:00:00Z'), decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED },
@@ -472,20 +526,24 @@ describe('buildGetPreviousSubmissionPage', () => {
 			{ completionDate: null, decision: null }
 		];
 		const documents = [
+			// BO report from reviewing sub2 (in g3-document-2)
 			{
 				guid: 'report-1-guid',
-				name: 'GW3Report-Sub1.pdf',
-				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_1,
+				name: 'GW3Report-Sub2.pdf',
+				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_2,
+				isDeleted: false,
 				latestDocumentVersion: {
-					originalFilename: 'GW3Report-Sub1.pdf',
-					fileName: 'GW3Report-Sub1.pdf',
+					originalFilename: 'GW3Report-Sub2.pdf',
+					fileName: 'GW3Report-Sub2.pdf',
 					dateCreated: new Date('2026-10-15')
 				}
 			},
+			// LPA uploads for sub2 (in g3-document-2, soft-deleted after BO sync)
 			{
 				guid: 'resub-doc-guid',
 				name: 'updated-plan.pdf',
 				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_2,
+				isDeleted: true,
 				latestDocumentVersion: {
 					originalFilename: 'updated-plan.pdf',
 					fileName: 'updated-plan.pdf',
@@ -493,13 +551,14 @@ describe('buildGetPreviousSubmissionPage', () => {
 				}
 			},
 			{
-				guid: 'report-2-guid',
-				name: 'GW3Report-Sub2.pdf',
+				guid: 'resub-doc-2-guid',
+				name: 'extra-evidence.pdf',
 				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_2,
+				isDeleted: true,
 				latestDocumentVersion: {
-					originalFilename: 'GW3Report-Sub2.pdf',
-					fileName: 'GW3Report-Sub2.pdf',
-					dateCreated: new Date('2026-11-01')
+					originalFilename: 'extra-evidence.pdf',
+					fileName: 'extra-evidence.pdf',
+					dateCreated: new Date('2026-10-20')
 				}
 			}
 		];
@@ -513,50 +572,115 @@ describe('buildGetPreviousSubmissionPage', () => {
 		assert.ok(view.includes('previous-submission.njk'));
 		assert.strictEqual(data.submissionNumber, 2);
 		assert.strictEqual(data.isInitialSubmission, false);
-		// Latest report is from g3-document-2 (first doc found scanning from top)
 		assert.strictEqual(data.reportSubmissionNumber, 2);
 
-		// Report is the first document found in g3-document-2
-		const reportDoc = data.reportDocument as Record<string, unknown>;
-		assert.ok(reportDoc);
-		assert.strictEqual(reportDoc.fileName, 'updated-plan.pdf');
+		// Report: BO report for sub2 from g3-document-2
+		const reportDocs = data.reportDocuments as Record<string, unknown>[];
+		assert.strictEqual(reportDocs.length, 1);
+		assert.strictEqual(reportDocs[0].fileName, 'GW3Report-Sub2.pdf');
 
-		// Previous submissions should link to submission 1
+		// Previous submissions only includes submissions BEFORE sub2
 		const prevSubs = data.previousSubmissions as { number: number; url: string }[];
 		assert.strictEqual(prevSubs.length, 1);
 		assert.strictEqual(prevSubs[0].number, 1);
 		assert.ok(prevSubs[0].url.includes('/submission/1'));
 
-		// Resubmission documents (excludes the doc used as report)
+		// New or updated documents: soft-deleted LPA uploads from g3-document-2
 		const resubDocs = data.resubmissionDocuments as { fileName: string }[];
-		assert.strictEqual(resubDocs.length, 1);
-		assert.strictEqual(resubDocs[0].fileName, 'GW3Report-Sub2.pdf');
+		assert.strictEqual(resubDocs.length, 2);
+		assert.strictEqual(resubDocs[0].fileName, 'updated-plan.pdf');
+		assert.strictEqual(resubDocs[1].fileName, 'extra-evidence.pdf');
 
 		// No document sections for non-initial submission
 		const sections = data.documentSections as unknown[];
 		assert.strictEqual(sections.length, 0);
 	});
 
-	it('includes submission URLs in previous submissions list', () => {
+	it('renders submission 3 with report and LPA uploads from g3-document-3', () => {
 		const handler = buildGetPreviousSubmissionPage();
 		const submissions = [
-			{ completionDate: new Date('2026-10-01'), decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED },
-			{ completionDate: new Date('2026-10-20'), decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED },
-			{ completionDate: new Date('2026-11-05'), decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED },
+			{ completionDate: new Date('2026-10-01T12:00:00Z'), decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED },
+			{ completionDate: new Date('2026-10-20T14:30:00Z'), decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED },
+			{ completionDate: new Date('2026-11-05T09:00:00Z'), decision: GATEWAY_3_DECISION_ID.RESUBMISSION_REQUIRED },
 			{ completionDate: null, decision: null }
 		];
-		const req = makeReq('3', submissions, []);
+		const documents = [
+			// BO report from reviewing sub1 (g3-document-1)
+			{
+				guid: 'report-1-guid',
+				name: 'GW3Report-Sub1.pdf',
+				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_1,
+				isDeleted: false,
+				latestDocumentVersion: {
+					originalFilename: 'GW3Report-Sub1.pdf',
+					fileName: 'GW3Report-Sub1.pdf',
+					dateCreated: new Date('2026-10-15')
+				}
+			},
+			// BO report from reviewing sub2 (g3-document-2)
+			{
+				guid: 'report-2-guid',
+				name: 'GW3Report-Sub2.pdf',
+				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_2,
+				isDeleted: false,
+				latestDocumentVersion: {
+					originalFilename: 'GW3Report-Sub2.pdf',
+					fileName: 'GW3Report-Sub2.pdf',
+					dateCreated: new Date('2026-10-25')
+				}
+			},
+			// LPA uploads for sub3 (g3-document-3, soft-deleted after BO sync)
+			{
+				guid: 'resub3-doc-guid',
+				name: 'sub3-updated-plan.pdf',
+				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_3,
+				isDeleted: true,
+				latestDocumentVersion: {
+					originalFilename: 'sub3-updated-plan.pdf',
+					fileName: 'sub3-updated-plan.pdf',
+					dateCreated: new Date('2026-11-05')
+				}
+			},
+			// BO report synced into g3-document-3 (non-deleted)
+			{
+				guid: 'bo-report-3-guid',
+				name: 'GW3Report-Sub3.pdf',
+				documentSetId: DOCUMENT_SET_ID.G3_DOCUMENT_3,
+				isDeleted: false,
+				latestDocumentVersion: {
+					originalFilename: 'GW3Report-Sub3.pdf',
+					fileName: 'GW3Report-Sub3.pdf',
+					dateCreated: new Date('2026-11-10')
+				}
+			}
+		];
+		const req = makeReq('3', submissions, documents);
 		const { res, calls } = buildMockResponse();
 
 		handler(req, res, () => {});
 
 		const data = calls[0].args[1] as Record<string, unknown>;
+		assert.strictEqual(data.submissionNumber, 3);
+		assert.strictEqual(data.isInitialSubmission, false);
+
+		// Report from g3-document-3 (the BO report for sub3)
+		assert.strictEqual(data.reportSubmissionNumber, 3);
+		const reportDocs = data.reportDocuments as Record<string, unknown>[];
+		assert.strictEqual(reportDocs.length, 1);
+		assert.strictEqual(reportDocs[0].fileName, 'GW3Report-Sub3.pdf');
+
+		// Previous submissions only includes sub1 and sub2 (before sub3)
 		const prevSubs = data.previousSubmissions as { number: number; url: string }[];
 		assert.strictEqual(prevSubs.length, 2);
 		assert.strictEqual(prevSubs[0].number, 1);
 		assert.ok(prevSubs[0].url.includes('/submission/1'));
 		assert.strictEqual(prevSubs[1].number, 2);
 		assert.ok(prevSubs[1].url.includes('/submission/2'));
+
+		// New or updated documents: soft-deleted LPA upload from g3-document-3
+		const resubDocs = data.resubmissionDocuments as { fileName: string }[];
+		assert.strictEqual(resubDocs.length, 1);
+		assert.strictEqual(resubDocs[0].fileName, 'sub3-updated-plan.pdf');
 	});
 });
 
@@ -710,7 +834,6 @@ describe('buildPostDeclarationPage', () => {
 
 		await handler(req, res, () => {});
 
-		// Should have called update on the placeholder submission
 		assert.strictEqual(updateMock.mock.callCount(), 1);
 		const updateCall = (
 			updateMock.mock.calls as unknown as { arguments: [{ where: { id: string }; data: { completionDate: Date } }] }[]
@@ -718,7 +841,6 @@ describe('buildPostDeclarationPage', () => {
 		assert.strictEqual(updateCall.where.id, 'sub-2');
 		assert.ok(updateCall.data.completionDate instanceof Date);
 
-		// Should redirect to submission complete
 		const redirectCall = calls.find((c) => c.method === 'redirect');
 		assert.ok(redirectCall);
 		assert.ok((redirectCall.args[0] as string).includes('submission-complete'));
