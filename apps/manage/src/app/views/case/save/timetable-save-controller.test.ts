@@ -35,6 +35,9 @@ type MockServiceType = {
 		gateway3Submission: {
 			updateMany: any;
 		};
+		planPauseHistory: {
+			update: any;
+		};
 	};
 };
 function createMockService(): MockServiceType {
@@ -86,6 +89,9 @@ function createMockService(): MockServiceType {
 			},
 			gateway3Submission: {
 				updateMany: mock.fn(async () => ({ count: 1 }))
+			},
+			planPauseHistory: {
+				update: mock.fn(async () => ({}))
 			}
 		}
 	};
@@ -99,7 +105,8 @@ mock.timers.enable({
 
 function createController(mockService: MockServiceType, question: string) {
 	const req = {
-		params: {}
+		params: {},
+		url: `/timetable/fact-check/${question}`
 	} as Request;
 	req.params.question = question;
 	return new TimetableSaveController(mockService as unknown as ManageService, req, 'caseRef');
@@ -165,6 +172,35 @@ describe('test TimetableSaveController', () => {
 		assert.equal(mockService.db.examinationInfo.upsert.mock.calls[0].arguments.at(0).update.letterIssueDate, mockDate);
 		assert.equal(mockService.db.gateway1Info.upsert.mock.callCount(), 0);
 	});
+	for (const { type, fieldName } of [
+		{ type: 'start', fieldName: 'planPauseDate' },
+		{ type: 'end', fieldName: 'planPauseEndDate' }
+	]) {
+		for (const pauseNumber of [1, 2]) {
+			it(`updates the ${type} date of pause ${pauseNumber} directly in the database`, async () => {
+				const mockService = createMockService();
+				const updatedDate = new Date('2026-02-05T00:00:00.000Z');
+				const pauses = [
+					{ id: 'pause-2', createdAt: new Date('2026-01-02T00:00:00.000Z') },
+					{ id: 'pause-1', createdAt: new Date('2026-01-01T00:00:00.000Z') }
+				];
+				mockService.db.case.findUnique = mock.fn(async () => ({
+					examinationInfo: { planPauseHistory: pauses }
+				}));
+
+				const result = await createController(
+					mockService,
+					`examination-pause-${type}-date-${pauseNumber}`
+				).prepareAndSave({ [`${fieldName}-${pauseNumber}`]: updatedDate });
+
+				assert.deepEqual(result, { dataWritten: true, writtenToDB: true });
+				assert.deepEqual(mockService.db.planPauseHistory.update.mock.calls[0].arguments.at(0), {
+					where: { id: `pause-${pauseNumber}` },
+					data: { [fieldName]: updatedDate }
+				});
+			});
+		}
+	}
 	it('does not save anything when the question is not a timetable question', async () => {
 		const mockService = createMockService();
 		await createController(mockService, 'a-different-question').prepareAndSave({ a: 'b' });

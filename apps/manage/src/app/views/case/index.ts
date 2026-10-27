@@ -493,6 +493,7 @@ const CASE_JOURNEYS: CaseJourneyConfig[] = [
 		journeyId: COMMON_CONSTS.TIMETABLE_JOURNEY_ID,
 		createJourney: createTimetableJourney,
 		pageLoadHandler: TimetableTabHandler,
+		redirectToTaskListOnSuccess: true,
 		saveController: TimetableSaveController
 	}
 ];

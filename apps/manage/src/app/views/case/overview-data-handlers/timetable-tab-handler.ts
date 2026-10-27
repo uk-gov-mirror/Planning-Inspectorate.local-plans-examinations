@@ -22,7 +22,7 @@ export class TimetableTabHandler extends OverviewPageLoadHandler {
 		});
 		const examinationData = await db.examinationInfo.findUnique({
 			where: { caseId: caseRecord.id },
-			include: { hearings: true }
+			include: { hearings: true, planPauseHistory: true }
 		});
 
 		const isSound = formatValue(examinationData?.isSound);

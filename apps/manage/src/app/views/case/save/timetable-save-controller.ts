@@ -40,14 +40,14 @@ const timetableExaminationQuestions = new Set([
 	'fact-check-actual-date',
 	'fact-check-received-back-from-lpa-date',
 	'final-report-issue-date',
-	'plan-pause-start-date',
-	'plan-pause-end-date',
 	'withdrawn-date',
 	'is-sound',
 	'sound-unsound-date',
 	'adoption-date',
 	'approved-for-cil-date'
 ]);
+
+const timetablePauseQuestionPattern = /^examination-pause-(start|end)-date-(\d+)$/;
 
 export class TimetableSaveController extends SaveController {
 	protected async shouldSaveToSession() {
@@ -85,7 +85,9 @@ export class TimetableSaveController extends SaveController {
 			if ('gateway3ActualDate' in answers) gateway3Answers.actualDate = gateway3ActualDate;
 			await controller.prepareAndSave(gateway3Answers);
 		}
-		if (timetableExaminationQuestions.has(question)) {
+		const pauseMatch = timetablePauseQuestionPattern.exec(question);
+
+		if (timetableExaminationQuestions.has(question) || pauseMatch) {
 			const controller = new ExaminationSaveController(this.service, this.req, this.caseReference);
 			await controller.prepareAndSave(answers);
 		}

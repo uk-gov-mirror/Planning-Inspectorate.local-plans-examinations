@@ -556,6 +556,26 @@ export function createExaminationPauseJourney(req: Request, response: JourneyRes
 
 export function createTimetableJourney(req: Request, response: JourneyResponse, questions: Record<string, any>) {
 	const timetableUrl = req.baseUrl + '/timetable';
+	const pauseData = Array.isArray(response.answers.planPauseHistory) ? response.answers.planPauseHistory : [];
+	const sortedPauses = sortByDateColumn(pauseData as { [key: string]: any }[], 'createdAt');
+	const latestPause = sortedPauses.at(-1);
+
+	const factCheckSection = new Section('Fact Check', 'fact-check')
+		.addQuestion(questions.factCheckDateReceivedFromInspector)
+		.addQuestion(questions.factCheckDueDate)
+		.addQuestion(questions.factCheckActualDate)
+		.addQuestion(questions.factCheckReceivedBackFromLPADate)
+		.addQuestion(questions.finalReportIssueDate);
+
+	if (latestPause) {
+		const latestPauseId = sortedPauses.length;
+		response.answers[`planPauseDate-${latestPauseId}`] = latestPause.planPauseDate;
+		response.answers[`planPauseEndDate-${latestPauseId}`] = latestPause.planPauseEndDate;
+		factCheckSection.addQuestion(questions[`examinationPauseStartDate-${latestPauseId}`]);
+		if (latestPause.planPauseEndDate) {
+			factCheckSection.addQuestion(questions[`examinationPauseEndDate-${latestPauseId}`]);
+		}
+	}
 
 	const journey = new Journey({
 		journeyId: COMMON_CONSTS.TIMETABLE_JOURNEY_ID,
@@ -586,14 +606,7 @@ export function createTimetableJourney(req: Request, response: JourneyResponse, 
 				.addQuestion(questions.qaDate)
 				.addQuestion(questions.sentToPanelDate)
 				.addQuestion(questions.panelResponseSentToInspector),
-			new Section('Fact Check', 'fact-check')
-				.addQuestion(questions.factCheckDateReceivedFromInspector)
-				.addQuestion(questions.factCheckDueDate)
-				.addQuestion(questions.factCheckActualDate)
-				.addQuestion(questions.factCheckReceivedBackFromLPADate)
-				.addQuestion(questions.finalReportIssueDate)
-				.addQuestion(questions.planPauseStartDate)
-				.addQuestion(questions.planPauseEndDate)
+			factCheckSection
 				.addQuestion(questions.withdrawnDate)
 				.addQuestion(questions.isSound)
 				.addQuestion(questions.soundUnsoundDate)
